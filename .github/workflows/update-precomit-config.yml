@@ -1,0 +1,24 @@
+name: Update pre-commit hooks
+
+on:
+  schedule:
+    - cron: '0 21 1 * *'  #21st day of every month 1:00 am UTC time
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+    - name: update pre-commit packages
+      run: |
+        pip install pre-commit
+        pre-commit autoupdate
+    - uses: pre-commit/action@v3.0.0
+      continue-on-error: true
+    - uses: stefanzweifel/git-auto-commit-action@v4
+      with:
+        commit_message: update pre-commit packages

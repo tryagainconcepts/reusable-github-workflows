@@ -1,0 +1,196 @@
+name: Reusable python workflow
+
+on:
+  workflow_call:
+    inputs:
+      python_version:
+        default: '3.9'
+        required: false
+        type: string
+      test_script:
+        required: false
+        type: string
+      deploy_script:
+        required: false
+        type: string
+      setup_mongo:
+        default: false
+        required: false
+        type: boolean
+      setup_redis:
+        default: false
+        required: false
+        type: boolean
+      pypi_release:
+        default: false
+        required: false
+        type: boolean
+      aws_region:
+        required: false
+        default: "ap-southeast-1"
+        type: string
+      pipenv_setup_check:
+        required: false
+        default: true
+        type: boolean
+    secrets:
+      pipy_registry_auth:
+        required: false
+      slack_webhook_url:
+        description: "notify slack on github action result"
+        required: false
+      aws_key_id:
+        required: false
+      aws_secret:
+        required: false
+      env_base64:
+        required: false
+
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      env_base64: ${{ secrets.env_base64 }}
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+      - uses: wangsha/action-pipenv-setup@main
+        if: inputs.pipenv_setup_check
+      - name: linting
+        uses: psf/black@stable
+        with:
+          options: "--check --verbose"
+      - name: detect-secrets
+        uses: reviewdog/action-detect-secrets@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review # Change reporter.
+          fail_on_error: false
+      - name: misspell
+        uses: reviewdog/action-misspell@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          locale: "US/UK"
+      - uses: reviewdog/action-alex@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Change reviewdog reporter if you need [github-pr-check,github-check,github-pr-review].
+          reporter: github-pr-review
+          # Change reporter level if you need.
+          # GitHub Status Check won't become failure with warning.
+          level: warning
+      - uses: actions/setup-python@v4
+        id: setup-python
+        with:
+          cache: "pipenv"
+          python-version: ${{ inputs.python_version }}
+          check-latest: true
+      - name: install pipenv
+        run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
+      - name: Pull pre-commit config
+        run: |
+          curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/.pre-commit-config.yaml
+          curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/pyproject.toml
+        if: github.ref != 'refs/heads/main'
+      - uses: wangsha/pre-commit-github-action@main
+        with:
+          extra_args: --all-files
+        if: github.ref != 'refs/heads/main'
+      - uses: stefanzweifel/git-auto-commit-action@master
+        with:
+          commit_message: Automated Changes from pre-commit hooks
+          file_pattern: ':!.github/'
+        if: github.ref != 'refs/heads/main'
+      # Runs a single command using the runners shell
+      - name: Run a one-line script
+        run: |
+          echo Hello, world!
+          echo github ref: ${{ github.ref }}
+          echo pipenv-cache hit: ${{ steps.setup-python.outputs.cache-hit }}
+      - name: install package
+        run: pipenv sync --dev
+        env:
+          REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
+        if: ${{ steps.setup-python.outputs.cache-hit }} == false
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      env_base64: ${{ secrets.env_base64 }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          cache: "pipenv"
+          check-latest: true
+      - name: install pipenv
+        run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
+        continue-on-error: true
+      - uses: supercharge/redis-github-action@1.4.0
+        if: inputs.setup_redis
+      - name: Start MongoDB
+        uses: supercharge/mongodb-github-action@1.7.0
+        if: inputs.setup_mongo
+      - name: Setup ENV
+        if: ${{ env.env_base64 != '' }}
+        run: |
+          echo ${{ env.env_base64 }} | base64 -d > .env
+      - name: run test
+        if: inputs.test_script
+        run: ${{ inputs.test_script }}
+      - name: deploy
+        if: endsWith(github.ref, '/main') && inputs.deploy_script
+        run: ${{ inputs.deploy_script }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
+          AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
+  changelog:
+    needs: test
+    if: endsWith(github.ref, '/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: bumpversion
+        if: endsWith(github.ref, '/main')
+        uses: jasonamyers/github-bumpversion-action@v1.0.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BUMP: minor
+      - name: Push new version tag
+        if: endsWith(github.ref, '/main')
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tags: true
+      - name: Release pypi on main branch
+        if: endsWith(github.ref, '/main') && inputs.pypi_release
+        uses: wangsha/action-s3pypi@main
+        with:
+          args: "--bucket pipy.detalytics.com --unsafe-s3-website --put-root-index -v"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
+          AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
+      - name: Add Changelog
+        if: endsWith(github.ref, '/main')
+        uses: charity-detalytics/changelog-ci@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: notify slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow # selectable (default: repo,message)
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }} # required
+        if: always()

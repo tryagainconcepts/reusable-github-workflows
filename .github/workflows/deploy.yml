@@ -1,0 +1,75 @@
+name: 'Deploy'
+
+on:
+  workflow_call:
+    inputs:
+      python_version:
+        default: '3.9'
+        required: false
+        type: string
+      deploy_script:
+        required: false
+        type: string
+      aws_region:
+        required: false
+        default: "ap-southeast-1"
+        type: string
+    secrets:
+      slack_webhook_url:
+        description: "notify slack on github action result"
+        required: false
+      aws_key_id:
+        required: false
+      aws_secret:
+        required: false
+      env_base64:
+        required: false
+      pipy_registry_auth:
+        required: false
+
+jobs:
+  deploy:
+    name: Pass input and secrets to my-action
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      env_base64: ${{ secrets.env_base64 }}
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+      - name: Setup ENV
+        if: ${{ env.env_base64 != '' }}
+        run: echo ${{ env.env_base64 }} | base64 -d > .env
+      - uses: actions/setup-python@v4
+        id: setup-python
+        with:
+          cache: "pipenv"
+          python-version: ${{ inputs.python_version }}
+          check-latest: true
+      - name: install pipenv
+        run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
+      # Runs a single command using the runners shell
+      - name: Run a one-line script
+        run: |
+          echo Hello, world!
+          echo github ref: ${{ github.ref }}
+          echo pipenv-cache hit: ${{ steps.setup-python.outputs.cache-hit }}
+      - name: install package
+        run: pipenv sync --dev
+        env:
+          REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
+        if: ${{ steps.setup-python.outputs.cache-hit }} == false
+      - name: deploy
+        run: ${{ inputs.deploy_script }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
+          AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
+      - name: notify slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow # selectable (default: repo,message)
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }} # required
+        if: always()

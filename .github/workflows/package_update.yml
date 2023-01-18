@@ -1,0 +1,61 @@
+name: 'GitHub Actions update package'
+
+on:
+  workflow_call:
+    inputs:
+      python_version:
+        default: '3.9'
+        required: false
+        type: string
+      runs-on:
+        type: string
+        required: false
+        default: ubuntu-latest
+    secrets:
+      pipy_registry_auth:
+        required: false
+      checkout_token:
+        required: true
+jobs:
+  # This workflow contains a single job called "build"
+  package-update:
+    # The type of runner that the job will run on
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: 20
+    env:
+      env_base64: ${{ secrets.env_base64 }}
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.checkout_token }}
+      - name: Setup ENV
+        if: ${{ env.env_base64 != '' }}
+        run: echo ${{ env.env_base64 }} | base64 -d > .env
+      - uses: actions/setup-python@v4
+        with:
+          cache: "pipenv"
+          python-version: ${{ inputs.python_version }}
+          check-latest: true
+      - name: install pipenv
+        run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
+      - name: Pull pre-commit config
+        run: |
+          curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/.pre-commit-config.yaml
+          curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/pyproject.toml
+          curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/.pylintrc
+      - uses: wangsha/pre-commit-github-action@main
+        with:
+          extra_args: --all-files
+      - name: install package
+        run: |
+          rm -f Pipfile.lock
+          pipenv update --dev
+        env:
+          REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          base: main
+          token: ${{ secrets.checkout_token }}
