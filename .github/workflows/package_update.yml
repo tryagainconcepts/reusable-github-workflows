@@ -38,6 +38,7 @@ jobs:
           cache: "pipenv"
           python-version: ${{ inputs.python_version }}
           check-latest: true
+        if: ${{ inputs.runs-on != 'self-hosted' }}
       - name: install pipenv
         run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
       - name: Pull pre-commit config
@@ -45,6 +46,7 @@ jobs:
           curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/.pre-commit-config.yaml
           curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/pyproject.toml
           curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/.pylintrc
+        if: ${{ inputs.runs-on != 'self-hosted' }}
       - uses: wangsha/pre-commit-github-action@main
         with:
           extra_args: --all-files
