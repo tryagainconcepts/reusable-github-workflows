@@ -33,6 +33,10 @@ on:
         required: false
         default: true
         type: boolean
+      runs-on:
+        type: string
+        required: false
+        default: self-hosted
     secrets:
       pipy_registry_auth:
         required: false
@@ -50,7 +54,7 @@ on:
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 20
     env:
       env_base64: ${{ secrets.env_base64 }}
@@ -88,8 +92,10 @@ jobs:
           cache: "pipenv"
           python-version: ${{ inputs.python_version }}
           check-latest: true
+        if: ${{ inputs.runs-on != 'self-hosted' }}
       - name: install pipenv
         run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
+        if: ${{ inputs.runs-on != 'self-hosted' }}
       - name: Pull pre-commit config
         run: |
           curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/.pre-commit-config.yaml
@@ -118,7 +124,7 @@ jobs:
 
   test:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     env:
       env_base64: ${{ secrets.env_base64 }}
     steps:
@@ -130,13 +136,15 @@ jobs:
           python-version: '3.9'
           cache: "pipenv"
           check-latest: true
+        if: ${{ inputs.runs-on != 'self-hosted' }}
       - name: install pipenv
         run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
         continue-on-error: true
+        if: ${{ inputs.runs-on != 'self-hosted' }}
       - uses: supercharge/redis-github-action@1.4.0
         if: inputs.setup_redis
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.7.0
+        uses: supercharge/mongodb-github-action@1.8.0
         if: inputs.setup_mongo
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
@@ -155,7 +163,7 @@ jobs:
   changelog:
     needs: test
     if: endsWith(github.ref, '/main')
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     steps:
       - uses: actions/checkout@v3
         with:
