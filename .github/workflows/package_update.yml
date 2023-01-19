@@ -10,7 +10,7 @@ on:
       runs-on:
         type: string
         required: false
-        default: ubuntu-latest
+        default: self-hosted
     secrets:
       pipy_registry_auth:
         required: false
