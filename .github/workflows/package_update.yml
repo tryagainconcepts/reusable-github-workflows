@@ -44,9 +44,9 @@ jobs:
         if: ${{ inputs.runs-on != 'self-hosted' }}
       - name: Pull pre-commit config
         run: |
-          curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/.pre-commit-config.yaml
-          curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/pyproject.toml
-          curl -O https://raw.githubusercontent.com/wangsha/reusable-github-workflows/main/.pylintrc
+          curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
+          curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/pyproject.toml
+          curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pylintrc
       - uses: wangsha/pre-commit-github-action@main
         with:
           extra_args: --all-files
