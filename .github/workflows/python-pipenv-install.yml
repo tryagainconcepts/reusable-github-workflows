@@ -52,12 +52,10 @@ on:
 
 
 jobs:
-  build:
-    name: Build
-    runs-on: ${{ inputs.runs-on }}
-    timeout-minutes: 20
-    env:
-      env_base64: ${{ secrets.env_base64 }}
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
@@ -86,6 +84,13 @@ jobs:
           # Change reporter level if you need.
           # GitHub Status Check won't become failure with warning.
           level: warning
+    build:
+      name: Build
+      runs-on: ${{ inputs.runs-on }}
+      timeout-minutes: 20
+      env:
+        env_base64: ${{ secrets.env_base64 }}
+      steps:
       - uses: actions/setup-python@v4
         id: setup-python
         with:
@@ -121,9 +126,8 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
         if: ${{ steps.setup-python.outputs.cache-hit }} == false
-
   test:
-    needs: build
+    needs: [build, lint]
     runs-on: ${{ inputs.runs-on }}
     env:
       env_base64: ${{ secrets.env_base64 }}
