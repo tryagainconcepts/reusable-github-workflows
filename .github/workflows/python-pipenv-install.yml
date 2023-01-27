@@ -91,6 +91,8 @@ jobs:
     env:
       env_base64: ${{ secrets.env_base64 }}
     steps:
+      - uses: supercharge/redis-github-action@1.4.0
+        if: inputs.setup_redis && inputs.runs-on != 'self-hosted'
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         id: setup-python
