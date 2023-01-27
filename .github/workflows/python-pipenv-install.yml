@@ -36,7 +36,7 @@ on:
       runs-on:
         type: string
         required: false
-        default: self-hosted
+        default: self-hosted-linux
     secrets:
       pipy_registry_auth:
         required: false
