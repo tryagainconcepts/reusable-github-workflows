@@ -141,16 +141,16 @@ jobs:
           python-version: '3.9'
           cache: "pipenv"
           check-latest: true
-        if: ${{ inputs.runs-on != 'self-hosted' }}
+        if: inputs.runs-on != 'self-hosted'
       - name: install pipenv
         run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
         continue-on-error: true
-        if: ${{ inputs.runs-on != 'self-hosted' }}
+        if: inputs.runs-on != 'self-hosted'
       - uses: supercharge/redis-github-action@1.4.0
-        if: ${{ inputs.setup_redis && inputs.runs-on != 'self-hosted' }}
+        if: inputs.setup_redis && inputs.runs-on != 'self-hosted'
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@1.8.0
-        if: ${{ inputs.setup_mongo && inputs.runs-on != 'self-hosted' }}
+        if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
         run: |
