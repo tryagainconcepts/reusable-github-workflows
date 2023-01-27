@@ -100,10 +100,10 @@ jobs:
           cache: "pipenv"
           python-version: ${{ inputs.python_version }}
           check-latest: true
-        if: ${{ inputs.runs-on != 'self-hosted' }}
+        if: inputs.runs-on != 'self-hosted'
       - name: install pipenv
         run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
-        if: ${{ inputs.runs-on != 'self-hosted' }}
+        if: inputs.runs-on != 'self-hosted'
       - name: Pull pre-commit config
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
@@ -170,7 +170,7 @@ jobs:
   changelog:
     needs: test
     if: endsWith(github.ref, '/main')
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:

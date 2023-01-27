@@ -14,6 +14,10 @@ on:
         required: false
         default: "ap-southeast-1"
         type: string
+      runs-on:
+        type: string
+        required: false
+        default: self-hosted
     secrets:
       slack_webhook_url:
         description: "notify slack on github action result"
@@ -30,7 +34,7 @@ on:
 jobs:
   deploy:
     name: Pass input and secrets to my-action
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 10
     env:
       env_base64: ${{ secrets.env_base64 }}
@@ -46,8 +50,10 @@ jobs:
           cache: "pipenv"
           python-version: ${{ inputs.python_version }}
           check-latest: true
+        if: inputs.runs-on != 'self-hosted'
       - name: install pipenv
         run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
+        if: inputs.runs-on != 'self-hosted'
       # Runs a single command using the runners shell
       - name: Run a one-line script
         run: |
@@ -58,7 +64,7 @@ jobs:
         run: pipenv sync --dev
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
-        if: ${{ steps.setup-python.outputs.cache-hit }} == false
+        if: steps.setup-python.outputs.cache-hit == false
       - name: deploy
         run: ${{ inputs.deploy_script }}
         env:
