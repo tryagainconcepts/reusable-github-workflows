@@ -1,4 +1,4 @@
-name: 'GitHub Actions update package'
+name: 'Update Pipenv Package'
 
 on:
   workflow_call:

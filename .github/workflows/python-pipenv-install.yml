@@ -1,4 +1,4 @@
-name: Reusable python workflow
+name: Python CI Workflow
 
 on:
   workflow_call:
