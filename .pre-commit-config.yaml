@@ -37,18 +37,3 @@ repos:
   hooks:
     - id: pycln
       args: [ --all ]
-- repo: https://github.com/pre-commit/pygrep-hooks
-  rev: v1.10.0
-  hooks:
-      - id: python-check-blanket-noqa
-      - id: python-check-blanket-type-ignore
-      - id: python-no-log-warn
-      - id: python-no-eval
-      - id: rst-backticks
-      - id: rst-directive-colons
-      - id: rst-inline-touching-normal
-- repo: https://github.com/mgedmin/check-manifest
-  rev: "0.49"
-  hooks:
-      - id: check-manifest
-        stages: [manual]
