@@ -21,7 +21,6 @@ jobs:
   package-update:
     # The type of runner that the job will run on
     runs-on: ${{ inputs.runs-on }}
-    container: ghcr.io/tryagainconcepts/github-action-container:latest
     timeout-minutes: 20
     env:
       env_base64: ${{ secrets.env_base64 }}
