@@ -6,12 +6,12 @@ on:
   pull_request:
   push:
     branches: [main]
-  workflow_call:
+  workflow_dispatch:
     inputs:
-      dummy-input:
-        type: string
-        required: false
-        default: ubuntu-latest
+      logLevel:
+        description: 'Log level'
+        required: true
+        default: 'warning'
 
 jobs:
   pre-commit:
