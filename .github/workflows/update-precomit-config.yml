@@ -7,10 +7,11 @@ on:
   push:
     branches: [main]
   workflow_call:
-    runs-on:
-      type: string
-      required: false
-      default: ubuntu-latest
+    inputs:
+      runs-on:
+        type: string
+        required: false
+        default: ubuntu-latest
 
 jobs:
   pre-commit:
