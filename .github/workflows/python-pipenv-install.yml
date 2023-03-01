@@ -52,7 +52,7 @@ on:
 
 
 jobs:
-  build:
+  build-and-test:
     name: Build
     runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 20
@@ -117,7 +117,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
   changelog:
-    needs: test
+    needs: build-and-test
     if: endsWith(github.ref, '/main')
     runs-on: ubuntu-latest
     steps:
