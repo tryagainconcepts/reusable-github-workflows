@@ -97,25 +97,6 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
         if: ${{ steps.setup-python.outputs.cache-hit }} == false
-  test:
-    needs: build
-    runs-on: ${{ inputs.runs-on }}
-    env:
-      env_base64: ${{ secrets.env_base64 }}
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-          cache: "pipenv"
-          check-latest: true
-        if: inputs.runs-on != 'self-hosted'
-      - name: install pipenv
-        run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
-        continue-on-error: true
-        if: inputs.runs-on != 'self-hosted'
       - uses: supercharge/redis-github-action@1.4.0
         if: inputs.setup_redis && inputs.runs-on != 'self-hosted'
       - name: Start MongoDB
