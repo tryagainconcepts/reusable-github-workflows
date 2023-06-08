@@ -54,7 +54,7 @@ on:
 jobs:
   build-and-test:
     name: Build
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ["${{ inputs.runs-on }}", macOS]
     timeout-minutes: 20
     env:
       env_base64: ${{ secrets.env_base64 }}
