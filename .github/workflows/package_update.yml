@@ -57,7 +57,11 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v4
+        uses: peter-evans/create-pull-request@v5
         with:
           base: main
           token: ${{ secrets.checkout_token }}
+          title: [Automated] Update Pipenv Package
+          labels:
+            - automated
+            - automerge
