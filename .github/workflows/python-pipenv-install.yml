@@ -158,6 +158,9 @@ jobs:
         uses: charity-detalytics/changelog-ci@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: cleanup
+        run: |
+          pipenv --rm
       - name: notify slack
         uses: 8398a7/action-slack@v3
         with:
