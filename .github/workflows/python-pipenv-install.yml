@@ -122,6 +122,9 @@ jobs:
         env:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           MERGE_LABELS: "automerge,!work in progress"
+      - name: cleanup
+        run: |
+          pipenv --rm
   changelog:
     needs: build-and-test
     if: endsWith(github.ref, '/main')
@@ -158,9 +161,6 @@ jobs:
         uses: charity-detalytics/changelog-ci@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: cleanup
-        run: |
-          pipenv --rm
       - name: notify slack
         uses: 8398a7/action-slack@v3
         with:
