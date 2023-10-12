@@ -164,6 +164,7 @@ jobs:
       if: endsWith(github.ref, '/main')
       needs: build-and-test
       steps:
+        - uses: actions/checkout@v3
         - name: Add Changelog
           if: endsWith(github.ref, '/main')
           uses: saadmk11/changelog-ci@v1.1.2
