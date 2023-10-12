@@ -133,6 +133,13 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+      - uses: actions/setup-python@v4
+        id: setup-python
+        with:
+          cache: "pipenv"
+          python-version: ${{ inputs.python_version }}
+          check-latest: true
+        if: inputs.runs-on != 'self-hosted'
       - uses: wangsha/action-pipenv-setup@main
         if: inputs.pipenv_setup_check
       - name: bumpversion
