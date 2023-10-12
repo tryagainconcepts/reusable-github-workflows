@@ -156,7 +156,7 @@ jobs:
       - name: Release pypi on main branch
         if: endsWith(github.ref, '/main') && inputs.pypi_release
         run: |
-          pip install s3pypi
+          pip install s3pypi wheel
           python setup.py sdist bdist_wheel
           s3pypi dist/* --bucket pipy.detalytics.com --unsafe-s3-website --put-root-index -v
         env:
