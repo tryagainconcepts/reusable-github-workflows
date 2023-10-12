@@ -53,7 +53,7 @@ on:
 
 jobs:
   build-and-test:
-    name: Build
+    name: Build Test and Deploy
     runs-on: ["${{ inputs.runs-on }}", macOS]
     timeout-minutes: 20
     env:
@@ -124,7 +124,9 @@ jobs:
           MERGE_LABELS: "automerge,!work in progress"
       - name: bumpversion
         if: endsWith(github.ref, '/main')
-        uses: jasonamyers/github-bumpversion-action@v1.0.5
+        run: |
+          pip install --upgrade bump-my-version
+          bump-my-version bump ${DEFAULT_BUMP}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEFAULT_BUMP: minor
@@ -146,7 +148,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
       - name: Add Changelog
         if: endsWith(github.ref, '/main')
-        uses: charity-detalytics/changelog-ci@main
+        uses: saadmk11/changelog-ci@v1.1.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: cleanup
