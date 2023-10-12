@@ -122,25 +122,6 @@ jobs:
         env:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           MERGE_LABELS: "automerge,!work in progress"
-      - name: cleanup
-        run: |
-          pipenv --rm
-  changelog:
-    needs: build-and-test
-    if: endsWith(github.ref, '/main')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v4
-        id: setup-python
-        with:
-          cache: "pipenv"
-          python-version: ${{ inputs.python_version }}
-          check-latest: true
-      - uses: wangsha/action-pipenv-setup@main
-        if: inputs.pipenv_setup_check
       - name: bumpversion
         if: endsWith(github.ref, '/main')
         uses: jasonamyers/github-bumpversion-action@v1.0.5
@@ -168,6 +149,9 @@ jobs:
         uses: charity-detalytics/changelog-ci@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: cleanup
+        run: |
+          pipenv --rm
       - name: notify slack
         uses: 8398a7/action-slack@v3
         with:
