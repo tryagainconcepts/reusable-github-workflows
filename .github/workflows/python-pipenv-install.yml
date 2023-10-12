@@ -146,11 +146,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
-      - name: Add Changelog
-        if: endsWith(github.ref, '/main')
-        uses: saadmk11/changelog-ci@v1.1.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: cleanup
         run: |
           pipenv --rm
@@ -162,3 +157,15 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }} # required
         if: always()
+  changelog:
+      name: Changelog
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      if: endsWith(github.ref, '/main')
+      needs: build-and-test
+      steps:
+        - name: Add Changelog
+          if: endsWith(github.ref, '/main')
+          uses: saadmk11/changelog-ci@v1.1.2
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
