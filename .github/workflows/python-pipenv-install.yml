@@ -139,7 +139,6 @@ jobs:
           cache: "pipenv"
           python-version: ${{ inputs.python_version }}
           check-latest: true
-        if: inputs.runs-on != 'self-hosted'
       - uses: wangsha/action-pipenv-setup@main
         if: inputs.pipenv_setup_check
       - name: bumpversion
@@ -156,9 +155,9 @@ jobs:
           tags: true
       - name: Release pypi on main branch
         if: endsWith(github.ref, '/main') && inputs.pypi_release
-        uses: wangsha/action-s3pypi@main
-        with:
-          args: "--bucket pipy.detalytics.com --unsafe-s3-website --put-root-index -v"
+        run: |
+          pip install s3pypi
+          s3pypi --bucket pipy.detalytics.com --unsafe-s3-website --put-root-index -v
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
