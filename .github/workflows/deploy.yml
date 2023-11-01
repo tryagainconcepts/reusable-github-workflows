@@ -44,6 +44,10 @@ jobs:
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
         run: echo ${{ env.env_base64 }} | base64 -d > .env
+      - name: print github context
+        run: |
+          echo '${{ toJSON(github) }}'
+          export PIPENV_VENV_IN_PROJECT=1
       - uses: actions/setup-python@v4
         id: setup-python
         with:

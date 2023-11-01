@@ -63,7 +63,9 @@ jobs:
         if: inputs.setup_redis && inputs.runs-on != 'self-hosted'
       - uses: actions/checkout@v4
       - name: print github context
-        run: echo '${{ toJSON(github) }}'
+        run: |
+          echo '${{ toJSON(github) }}'
+          export PIPENV_VENV_IN_PROJECT=1
       - uses: actions/setup-python@v4
         id: setup-python
         with:
@@ -74,7 +76,6 @@ jobs:
       - name: install pipenv
         run: |
           curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
-          export PIPENV_VENV_IN_PROJECT=1
         if: inputs.runs-on != 'self-hosted'
       - name: Pull pre-commit config
         run: |
