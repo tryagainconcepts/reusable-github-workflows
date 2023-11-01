@@ -129,14 +129,14 @@ jobs:
         with:
           ref: main
       - name: deploy
-        if: endsWith(github.ref, '/main') && inputs.deploy_script
+        if: inputs.deploy_script && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged')
         run: ${{ inputs.deploy_script }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
       - name: bumpversion
-        if: endsWith(github.ref, '/main') 
+        if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
         run: |
           pip install --upgrade bump-my-version
           bump-my-version bump ${DEFAULT_BUMP}
@@ -144,13 +144,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEFAULT_BUMP: minor
       - name: Push new version tag
-        if: endsWith(github.ref, '/main')
+        if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tags: true
       - name: Release pypi on main branch
-        if: endsWith(github.ref, '/main') && inputs.pypi_release
+        if: inputs.pypi_release && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged')
         run: |
           pip install s3pypi wheel
           python setup.py sdist bdist_wheel
@@ -179,7 +179,6 @@ jobs:
       steps:
         - uses: actions/checkout@v4
         - name: Add Changelog
-          if: endsWith(github.ref, '/main')
           uses: charity-detalytics/changelog-ci@main
           env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
