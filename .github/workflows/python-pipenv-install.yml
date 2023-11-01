@@ -61,9 +61,11 @@ jobs:
     steps:
       - uses: supercharge/redis-github-action@1.4.0
         if: inputs.setup_redis && inputs.runs-on != 'self-hosted'
-      - uses: actions/checkout@v4
+      - id: checkout
+        uses: actions/checkout@v4
       - name: print github context
         run: |
+          echo '${{ toJSON(steps.checkout.outputs) }}'
           echo '${{ toJSON(github) }}'
           export PIPENV_VENV_IN_PROJECT=1
       - uses: actions/setup-python@v4
