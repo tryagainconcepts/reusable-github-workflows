@@ -122,7 +122,7 @@ jobs:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           MERGE_LABELS: "automerge,!work in progress"
       - name: switch to main branch
-        if: steps.automerge.outputs.mergeResult == "merged"
+        if: steps.automerge.outputs.mergeResult == 'merged'
         uses: actions/checkout@v4
         with:
           ref: main
