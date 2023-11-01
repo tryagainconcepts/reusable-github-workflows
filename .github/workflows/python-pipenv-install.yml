@@ -62,7 +62,8 @@ jobs:
       - uses: supercharge/redis-github-action@1.4.0
         if: inputs.setup_redis && inputs.runs-on != 'self-hosted'
       - uses: actions/checkout@v4
-      - run: echo '${{ toJSON(github) }}'
+      - name: print github context
+        run: echo '${{ toJSON(github) }}'
       - uses: actions/setup-python@v4
         id: setup-python
         with:
