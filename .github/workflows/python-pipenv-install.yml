@@ -114,6 +114,18 @@ jobs:
       - name: run test
         if: inputs.test_script
         run: ${{ inputs.test_script }}
+      - name: automerge on PR labelled with automerge
+        id: automerge
+        if: github.ref != 'refs/heads/main'
+        uses: "pascalgn/automerge-action@v0.15.6"
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          MERGE_LABELS: "automerge,!work in progress"
+      - name: switch to main branch
+        if: steps.automerge.outputs.mergeResult == "merged"
+        uses: actions/checkout@v4
+        with:
+          ref: main
       - name: deploy
         if: endsWith(github.ref, '/main') && inputs.deploy_script
         run: ${{ inputs.deploy_script }}
@@ -121,12 +133,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
-      - name: automerge on PR labelled with automerge
-        if: github.ref != 'refs/heads/main'
-        uses: "pascalgn/automerge-action@v0.15.6"
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          MERGE_LABELS: "automerge,!work in progress"
       - name: bumpversion
         if: endsWith(github.ref, '/main') 
         run: |
