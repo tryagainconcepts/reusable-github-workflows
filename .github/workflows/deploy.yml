@@ -66,6 +66,7 @@ jobs:
           echo pipenv-cache hit: ${{ steps.setup-python.outputs.cache-hit }}
       - name: install package
         run: |
+          pipenv --clear
           pipenv sync
           pipenv run pip install https://github.com/wangsha/Zappa/archive/main.zip
         env:
