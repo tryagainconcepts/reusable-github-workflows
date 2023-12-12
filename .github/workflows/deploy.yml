@@ -69,6 +69,7 @@ jobs:
           pipenv --clear
           pipenv sync
           pipenv run pip install https://github.com/wangsha/Zappa/archive/main.zip
+          pipenv run pip list
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
         if: steps.setup-python.outputs.cache-hit != 'true'

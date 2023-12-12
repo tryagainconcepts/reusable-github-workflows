@@ -103,6 +103,7 @@ jobs:
           export PIPENV_VENV_IN_PROJECT=1
           pipenv --clear 
           pipenv sync --dev
+          pipenv run pip list
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
         if: ${{ steps.setup-python.outputs.cache-hit }} == false

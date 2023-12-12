@@ -59,6 +59,7 @@ jobs:
           pipenv --clear 
           rm -f Pipfile.lock
           pipenv update --dev
+          pipenv run pip list
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: Create Pull Request
