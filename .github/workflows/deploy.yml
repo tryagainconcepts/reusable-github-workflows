@@ -47,7 +47,6 @@ jobs:
       - name: print github context
         run: |
           echo '${{ toJSON(github) }}'
-          export PIPENV_VENV_IN_PROJECT=1
       - uses: actions/setup-python@v4
         id: setup-python
         with:
@@ -66,6 +65,7 @@ jobs:
           echo pipenv-cache hit: ${{ steps.setup-python.outputs.cache-hit }}
       - name: install package
         run: |
+          export PIPENV_VENV_IN_PROJECT=1
           pipenv --clear
           pipenv sync
           pipenv run pip install https://github.com/wangsha/Zappa/archive/main.zip

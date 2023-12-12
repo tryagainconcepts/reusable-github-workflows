@@ -33,7 +33,6 @@ jobs:
       - name: print github context
         run: |
           echo '${{ toJSON(github) }}'
-          export PIPENV_VENV_IN_PROJECT=1
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
         run: echo ${{ env.env_base64 }} | base64 -d > .env
@@ -56,6 +55,7 @@ jobs:
           extra_args: --all-files
       - name: install package
         run: |
+          export PIPENV_VENV_IN_PROJECT=1
           pipenv --clear 
           rm -f Pipfile.lock
           pipenv update --dev

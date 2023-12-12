@@ -67,7 +67,6 @@ jobs:
         run: |
           echo '${{ toJSON(steps.checkout.outputs) }}'
           echo '${{ toJSON(github) }}'
-          export PIPENV_VENV_IN_PROJECT=1
       - uses: actions/setup-python@v4
         id: setup-python
         with:
@@ -101,6 +100,7 @@ jobs:
           echo pipenv-cache hit: ${{ steps.setup-python.outputs.cache-hit }}
       - name: install package
         run: |
+          export PIPENV_VENV_IN_PROJECT=1
           pipenv --clear 
           pipenv sync --dev
         env:
