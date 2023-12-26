@@ -76,6 +76,7 @@ jobs:
         if: inputs.runs-on != 'self-hosted'
       - name: install pipenv
         run: |
+          pip install --upgrade pip setuptools wheel
           curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
         if: inputs.runs-on != 'self-hosted'
       - name: Pull pre-commit config

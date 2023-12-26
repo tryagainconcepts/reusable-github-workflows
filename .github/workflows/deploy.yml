@@ -55,7 +55,9 @@ jobs:
           check-latest: true
         if: inputs.runs-on != 'self-hosted'
       - name: install pipenv
-        run: curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
+        run: |
+          pip install --upgrade pip setuptools wheel
+          curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
         if: inputs.runs-on != 'self-hosted'
       # Runs a single command using the runners shell
       - name: Run a one-line script
