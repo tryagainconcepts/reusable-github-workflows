@@ -31,6 +31,9 @@ on:
       pipy_registry_auth:
         required: false
 
+env:
+  PIPENV_VENV_IN_PROJECT: 1
+
 jobs:
   deploy:
     name: Pass input and secrets to my-action

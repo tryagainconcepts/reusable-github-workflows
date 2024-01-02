@@ -50,6 +50,8 @@ on:
       env_base64:
         required: false
 
+env:
+  PIPENV_VENV_IN_PROJECT: 1
 
 jobs:
   build-and-test:
@@ -76,7 +78,6 @@ jobs:
         if: inputs.runs-on != 'self-hosted'
       - name: install pipenv
         run: |
-          pip install --upgrade pip setuptools wheel
           curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
         if: inputs.runs-on != 'self-hosted'
       - name: Pull pre-commit config
@@ -101,7 +102,6 @@ jobs:
           echo pipenv-cache hit: ${{ steps.setup-python.outputs.cache-hit }}
       - name: install package
         run: |
-          export PIPENV_VENV_IN_PROJECT=1
           pipenv --clear 
           pipenv sync --dev
           pipenv run pip list

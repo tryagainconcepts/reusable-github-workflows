@@ -16,6 +16,10 @@ on:
         required: false
       checkout_token:
         required: true
+
+env:
+  PIPENV_VENV_IN_PROJECT: 1
+
 jobs:
   # This workflow contains a single job called "build"
   package-update:
@@ -44,7 +48,6 @@ jobs:
         if: inputs.runs-on != 'self-hosted'
       - name: install pipenv
         run: |
-          pip install --upgrade pip setuptools wheel
           curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
         if: inputs.runs-on != 'self-hosted'
       - name: Pull pre-commit config
@@ -57,7 +60,6 @@ jobs:
           extra_args: --all-files
       - name: install package
         run: |
-          export PIPENV_VENV_IN_PROJECT=1
           pipenv --clear 
           rm -f Pipfile.lock
           pipenv update --dev
