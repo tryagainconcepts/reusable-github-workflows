@@ -31,7 +31,7 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
         with:
           token: ${{ secrets.checkout_token }}
       - name: print github context
@@ -40,7 +40,7 @@ jobs:
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
         run: echo ${{ env.env_base64 }} | base64 -d > .env
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@main
         with:
           cache: "pipenv"
           python-version: ${{ inputs.python_version }}
@@ -67,7 +67,7 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@main
         with:
           base: main
           token: ${{ secrets.checkout_token }}

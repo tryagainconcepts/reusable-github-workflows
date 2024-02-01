@@ -43,14 +43,14 @@ jobs:
       env_base64: ${{ secrets.env_base64 }}
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
         run: echo ${{ env.env_base64 }} | base64 -d > .env
       - name: print github context
         run: |
           echo '${{ toJSON(github) }}'
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@main
         id: setup-python
         with:
           cache: "pipenv"
@@ -88,7 +88,7 @@ jobs:
         run: |
           pipenv --rm
       - name: notify slack
-        uses: 8398a7/action-slack@v3
+        uses: 8398a7/action-slack@master
         with:
           status: ${{ job.status }}
           fields: repo,message,commit,author,action,eventName,ref,workflow # selectable (default: repo,message)

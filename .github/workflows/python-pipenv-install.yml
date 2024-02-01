@@ -64,12 +64,12 @@ jobs:
       - uses: supercharge/redis-github-action@1.4.0
         if: inputs.setup_redis && inputs.runs-on != 'self-hosted'
       - id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@main
       - name: print github context
         run: |
           echo '${{ toJSON(steps.checkout.outputs) }}'
           echo '${{ toJSON(github) }}'
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@main
         id: setup-python
         with:
           cache: "pipenv"
@@ -129,7 +129,7 @@ jobs:
           MERGE_LABELS: "automerge,!work in progress"
       - name: switch to main branch
         if: steps.automerge.outputs.mergeResult == 'merged'
-        uses: actions/checkout@v4
+        uses: actions/checkout@main
         with:
           ref: main
       - name: deploy
@@ -167,7 +167,7 @@ jobs:
         run: |
           pipenv --rm
       - name: notify slack
-        uses: 8398a7/action-slack@v3
+        uses: 8398a7/action-slack@master
         with:
           status: ${{ job.status }}
           fields: repo,message,commit,author,action,eventName,ref,workflow # selectable (default: repo,message)
@@ -181,7 +181,7 @@ jobs:
       if: endsWith(github.ref, '/main')
       needs: build-and-test
       steps:
-        - uses: actions/checkout@v4
+        - uses: actions/checkout@main
         - name: Add Changelog
           uses: charity-detalytics/changelog-ci@main
           env:
