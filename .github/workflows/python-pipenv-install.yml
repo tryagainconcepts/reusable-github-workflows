@@ -123,7 +123,7 @@ jobs:
       - name: automerge on PR labelled with automerge
         id: automerge
         if: github.ref != 'refs/heads/main'
-        uses: "pascalgn/automerge-action@v0.15.6"
+        uses: "pascalgn/automerge-action@main"
         env:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           MERGE_LABELS: "automerge,!work in progress"
