@@ -143,7 +143,7 @@ jobs:
       - name: bumpversion
         if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
         run: |
-          pip install --upgrade bump-my-version
+          pip3 install --upgrade bump-my-version
           bump-my-version bump ${DEFAULT_BUMP}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
