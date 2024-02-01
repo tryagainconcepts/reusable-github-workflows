@@ -168,7 +168,7 @@ jobs:
         run: |
           pipenv --rm
       - name: notify slack
-        uses: 8398a7/action-slack@master
+        uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
           fields: repo,message,commit,author,action,eventName,ref,workflow # selectable (default: repo,message)
