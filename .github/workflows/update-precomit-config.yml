@@ -15,6 +15,7 @@ on:
 
 env:
   PIPENV_VENV_IN_PROJECT: 1
+  PIPENV_CUSTOM_VENV_NAME: .venv2
 
 jobs:
   pre-commit:
