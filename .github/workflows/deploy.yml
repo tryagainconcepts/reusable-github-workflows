@@ -33,7 +33,7 @@ on:
 
 env:
   PIPENV_VENV_IN_PROJECT: 1
-
+  PIPENV_CUSTOM_VENV_NAME: .venv2
 jobs:
   deploy:
     name: Pass input and secrets to my-action
