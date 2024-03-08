@@ -61,7 +61,7 @@ jobs:
           extra_args: --all-files
       - name: install package
         run: |
-          pipenv --clear 
+          pipenv --clear
           rm -f Pipfile.lock
           pipenv update --dev
           pipenv run pip list

@@ -103,7 +103,7 @@ jobs:
           echo pipenv-cache hit: ${{ steps.setup-python.outputs.cache-hit }}
       - name: install package
         run: |
-          pipenv --clear 
+          pipenv --clear
           pipenv sync --dev
           pipenv run pip list
         env:
@@ -164,9 +164,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
-      - name: cleanup
-        run: |
-          pipenv --rm
       - name: notify slack
         uses: 8398a7/action-slack@v3
         with:
