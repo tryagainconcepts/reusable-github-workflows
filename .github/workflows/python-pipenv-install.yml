@@ -138,6 +138,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
+          REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: bumpversion
         if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
         run: |
