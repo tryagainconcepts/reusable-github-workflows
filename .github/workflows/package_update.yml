@@ -54,9 +54,6 @@ jobs:
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
           rm -f .pylintrc
-      - uses: wangsha/pre-commit-github-action@main
-        with:
-          extra_args: --all-files
       - name: install package
         run: |
           pipenv --clear
@@ -65,6 +62,9 @@ jobs:
           pipenv run pip list
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
+      - uses: wangsha/pre-commit-github-action@main
+        with:
+          extra_args: --all-files
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@main
         with:
@@ -74,3 +74,4 @@ jobs:
           labels: |
             automated
             automerge
+        if: always()
