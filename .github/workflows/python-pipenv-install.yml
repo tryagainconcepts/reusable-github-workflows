@@ -106,8 +106,6 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
         if: ${{ steps.setup-python.outputs.cache-hit }} == false
-      - uses: supercharge/redis-github-action@1.4.0
-        if: inputs.setup_redis && inputs.runs-on != 'self-hosted'
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@1.8.0
         if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
