@@ -53,7 +53,6 @@ jobs:
       - name: Pull pre-commit config
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
-          curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/pyproject.toml
           rm -f .pylintrc
       - uses: wangsha/pre-commit-github-action@main
         with:
