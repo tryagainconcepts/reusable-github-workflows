@@ -65,6 +65,7 @@ jobs:
       - uses: wangsha/pre-commit-github-action@main
         with:
           extra_args: --all-files
+        continue-on-error: true
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@main
         with:
