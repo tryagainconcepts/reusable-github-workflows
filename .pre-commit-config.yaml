@@ -17,6 +17,7 @@ repos:
           - '--autofix'
           - '--no-sort-keys'
           - '--indent=4'
+          - '--no-ensure-ascii'
       - id: fix-encoding-pragma
         args:
           - '--remove'
@@ -26,12 +27,6 @@ repos:
       - id: pyupgrade
         args:
           - '--py39-plus'
-  - repo: 'https://github.com/hadialqattan/pycln'
-    rev: v2.4.0
-    hooks:
-      - id: pycln
-        args:
-          - '--all'
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
     rev: v0.3.5
