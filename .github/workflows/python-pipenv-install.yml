@@ -53,9 +53,9 @@ on:
 env:
   PIPENV_VENV_IN_PROJECT: 1
 jobs:
-  build-and-test:
+  build-test-deploy:
     name: Build Test and Deploy
-    runs-on: ["${{ inputs.runs-on }}", macOS]
+    runs-on: "${{ inputs.runs-on }}"
     timeout-minutes: 20
     env:
       env_base64: ${{ secrets.env_base64 }}
