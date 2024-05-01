@@ -174,7 +174,7 @@ jobs:
       runs-on: ubuntu-latest
       timeout-minutes: 10
       if: endsWith(github.ref, '/main')
-      needs: build-and-test
+      needs: build-test-deploy
       steps:
         - uses: actions/checkout@main
         - name: Add Changelog
