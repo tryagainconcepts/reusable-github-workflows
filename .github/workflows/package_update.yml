@@ -42,7 +42,6 @@ jobs:
         run: echo ${{ env.env_base64 }} | base64 -d > .env
       - uses: actions/setup-python@main
         with:
-          cache: "pipenv"
           python-version: ${{ inputs.python_version }}
           check-latest: true
         if: inputs.runs-on != 'self-hosted'
