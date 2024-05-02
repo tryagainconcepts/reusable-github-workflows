@@ -71,7 +71,6 @@ jobs:
       - uses: actions/setup-python@main
         id: setup-python
         with:
-          cache: "pipenv"
           python-version: ${{ inputs.python_version }}
           check-latest: true
         if: inputs.runs-on != 'self-hosted'
@@ -98,7 +97,6 @@ jobs:
         run: |
           echo Hello, world!
           echo github ref: ${{ github.ref }}
-          echo pipenv-cache hit: ${{ steps.setup-python.outputs.cache-hit }}
       - name: install package
         run: |
           pipenv --clear
@@ -106,7 +104,6 @@ jobs:
           pipenv run pip list
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
-        if: ${{ steps.setup-python.outputs.cache-hit }} == false
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@1.8.0
         if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
