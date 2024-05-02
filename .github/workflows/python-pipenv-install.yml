@@ -137,6 +137,8 @@ jobs:
       - name: bumpversion
         if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
         run: |
+          git config --global user.email "bumpversion@example.com"
+          git config --global user.name "versionbump"
           pip3 install --upgrade bump-my-version
           bump-my-version bump ${DEFAULT_BUMP}
         env:
