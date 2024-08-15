@@ -87,6 +87,7 @@ jobs:
           extra_args: --all-files
         if: github.ref != 'refs/heads/main'
         continue-on-error: true
+        timeout-minutes: 1
       - uses: stefanzweifel/git-auto-commit-action@master
         with:
           commit_message: Automated Changes from pre-commit hooks
