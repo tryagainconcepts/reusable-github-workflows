@@ -52,7 +52,6 @@ jobs:
       - name: Pull pre-commit config
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
-          rm -f .pylintrc
       - name: install package
         run: |
           pipenv --clear

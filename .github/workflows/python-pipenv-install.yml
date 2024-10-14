@@ -140,7 +140,7 @@ jobs:
         run: |
           git config --global user.email "bumpversion@example.com"
           git config --global user.name "versionbump"
-          pip3 install --upgrade bump-my-version
+          pipenv run pip install --upgrade bump-my-version
           bump-my-version bump ${DEFAULT_BUMP}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
