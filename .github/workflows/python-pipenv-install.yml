@@ -141,7 +141,7 @@ jobs:
           git config --global user.email "bumpversion@example.com"
           git config --global user.name "versionbump"
           pipenv run pip install --upgrade bump-my-version
-          bump-my-version bump ${DEFAULT_BUMP}
+          pipenv run bump-my-version bump ${DEFAULT_BUMP}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEFAULT_BUMP: minor
