@@ -156,7 +156,7 @@ jobs:
         run: |
           pip install s3pypi wheel
           python setup.py sdist bdist_wheel
-          s3pypi dist/* --bucket pipy.detalytics.com --unsafe-s3-website --put-root-index -v
+          s3pypi upload dist/* --bucket pipy.detalytics.com --unsafe-s3-website --put-root-index -v
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
