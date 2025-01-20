@@ -56,5 +56,7 @@ config-develop:
 config:
 	pipenv install
 
-release: clean
-	pipenv run s3pypi --bucket pipy.detalytics.com --private
+release-s3: clean
+	pipenv run pip install setuptools wheel
+	pipenv run python setup.py sdist bdist_wheel
+	s3pypi upload dist/* --bucket pipy.detalytics.com --put-root-index
