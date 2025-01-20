@@ -136,22 +136,15 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
-      - name: bumpversion
+      - name: Bump version
+        id: bump
         if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
-        run: |
-          git config --global user.email "bumpversion@example.com"
-          git config --global user.name "versionbump"
-          pipenv run pip install --upgrade bump-my-version
-          pipenv run bump-my-version bump ${DEFAULT_BUMP}
+        uses: callowayproject/bump-my-version@master
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEFAULT_BUMP: minor
-      - name: Push new version tag
-        if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
-        uses: ad-m/github-push-action@master
+          BUMPVERSION_TAG: "true"
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tags: true
+          args: minor
+          github-token: ${{ secrets.GH_TOKEN }}
       - name: Release pypi on main branch
         if: inputs.pypi_release && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged')
         run: |
