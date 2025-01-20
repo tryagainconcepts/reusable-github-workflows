@@ -22,7 +22,7 @@ format:
 	pipenv run pre-commit run --all-files
 
 lint:
-	pipenv run ruff check .
+	pipenv run ruff check . --exclude "*.ipynb"
 
 test: lint ## run tests quickly with the default Python
 	pipenv run python -m pytest -v -l tests
