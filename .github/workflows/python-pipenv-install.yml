@@ -52,6 +52,7 @@ on:
 
 env:
   PIPENV_VENV_IN_PROJECT: 1
+  PIPENV_DEFAULT_PYTHON_VERSION: 3.13
 jobs:
   build-test-deploy:
     name: Build Test and Deploy

@@ -24,7 +24,8 @@ format:
 lint:
 	pipenv run ruff check .
 
-
+test: lint ## run tests quickly with the default Python
+	pipenv run python -m pytest -v -l tests
 
 clean: clean-build clean-pyc
 
@@ -41,10 +42,10 @@ clean-pyc:
 
 
 config-test:
-	export PIPENV_DEFAULT_PYTHON_VERSION=3.13  && pipenv install --dev
+	pipenv install --dev
 
 config-develop:
-	export PIPENV_DEFAULT_PYTHON_VERSION=3.13 && pipenv install --dev
+	pipenv install --dev
 	pipenv run pip install pre-commit
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/pyproject.toml
@@ -53,7 +54,7 @@ config-develop:
 	pipenv run pre-commit run --all-files
 
 config:
-	export PIPENV_DEFAULT_PYTHON_VERSION=3.13 && pipenv install
+	pipenv install
 
 release: clean
 	pipenv run s3pypi --bucket pipy.detalytics.com --private
