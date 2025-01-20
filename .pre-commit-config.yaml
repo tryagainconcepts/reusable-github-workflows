@@ -35,4 +35,5 @@ repos:
       - id: ruff-format
       # Run the linter.
       - id: ruff
+        types_or: [ python, pyi ]
         args: [ --fix ]
