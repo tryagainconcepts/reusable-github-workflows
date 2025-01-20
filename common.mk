@@ -59,4 +59,4 @@ config:
 release-s3: clean
 	pipenv run pip install setuptools wheel
 	pipenv run python setup.py sdist bdist_wheel
-	s3pypi upload dist/* --bucket pipy.detalytics.com --put-root-index
+	pipenv run s3pypi upload dist/* --bucket pipy.detalytics.com --put-root-index
