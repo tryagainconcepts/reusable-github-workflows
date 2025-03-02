@@ -57,7 +57,7 @@ jobs:
       - name: install package
         run: |
           pipenv --clear
-          rm -f Pipfile.lock
+#          rm -f Pipfile.lock
           pipenv update --dev
           pipenv run pip list
         env:
