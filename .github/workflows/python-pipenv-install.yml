@@ -74,11 +74,11 @@ jobs:
         with:
           python-version: ${{ inputs.python_version }}
           check-latest: true
-        if: inputs.runs-on != 'self-hosted'
+        if: runner.environment != 'self-hosted'
       - name: install pipenv
         run: |
           curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
-        if: inputs.runs-on != 'self-hosted'
+        if: runner.environment != 'self-hosted'
       - name: Pull pre-commit config
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml

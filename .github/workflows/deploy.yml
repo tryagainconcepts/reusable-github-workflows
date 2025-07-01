@@ -56,12 +56,12 @@ jobs:
         with:
           python-version: ${{ inputs.python_version }}
           check-latest: true
-        if: inputs.runs-on != 'self-hosted'
+        if: runner.environment != 'self-hosted'
       - name: install pipenv
         run: |
           pip install --upgrade pip setuptools wheel
           curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
-        if: inputs.runs-on != 'self-hosted'
+        if: runner.environment != 'self-hosted'
       # Runs a single command using the runners shell
       - name: Run a one-line script
         run: |
