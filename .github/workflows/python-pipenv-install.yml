@@ -68,7 +68,9 @@ jobs:
       - name: print github context
         run: |
           echo '${{ toJSON(steps.checkout.outputs) }}'
-          echo '${{ toJSON(github) }}'
+          echo $JSON
+        env:
+          JSON: ${{ toJSON(github) }}
       - uses: actions/setup-python@main
         id: setup-python
         with:
