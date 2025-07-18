@@ -34,11 +34,6 @@ jobs:
       - name: print github context
         run: |
           echo '${{ toJSON(github) }}'
-      - name: Print pyproject.toml
-        run: |
-          echo '```toml'
-          cat pyproject.toml
-          echo '```'
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
         run: echo ${{ env.env_base64 }} | base64 -d > .env && source .env
@@ -55,6 +50,8 @@ jobs:
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/common.mk
       - name: install package
         run: |
+          echo "Registry username: $UV_INDEX_PRIVATE_REGISTRY_USERNAME"
+          uv venv
           uv lock --upgrade
         env:
           UV_INDEX_PRIVATE_REGISTRY_USERNAME: ${{ secrets.UV_INDEX_PRIVATE_REGISTRY_USERNAME }}
