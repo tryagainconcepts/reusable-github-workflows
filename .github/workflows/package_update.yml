@@ -36,7 +36,7 @@ jobs:
           echo '${{ toJSON(github) }}'
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
-        run: echo ${{ env.env_base64 }} | base64 -d > .env
+        run: echo ${{ env.env_base64 }} | base64 -d > .env && source .env
       - uses: actions/setup-python@main
         with:
           python-version: ${{ inputs.python_version }}
