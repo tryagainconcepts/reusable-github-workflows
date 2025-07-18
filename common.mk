@@ -19,14 +19,16 @@ help:
 
 format:
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
-	pipenv run pre-commit run --all-files
+	uvx pre-commit run --all-files
 
 lint:
-	pipenv run pip install ruff
-	pipenv run ruff check . --exclude "*.ipynb"
+	uv pip install ruff
+	uvx ruff check . --exclude "*.ipynb"
+	uvx pre-commit install
+	uvx pre-commit run --all-files
 
 test: lint ## run tests quickly with the default Python
-	pipenv run python -m pytest -v -l tests
+	uvx python -m pytest -v -l tests
 
 clean: clean-build clean-pyc
 
@@ -43,21 +45,21 @@ clean-pyc:
 
 
 config-test:
-	pipenv install --dev
+	uv pip install ".[dev]"
 
 config-develop:
-	pipenv install --dev
-	pipenv run pip install pre-commit
+	uv pip install ".[dev]"
+	uv pip install pre-commit
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/pyproject.toml
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/common.mk
-	pipenv run pre-commit install
-	pipenv run pre-commit run --all-files
+	uvx pre-commit install
+	uvx pre-commit run --all-files
 
 config:
-	pipenv install
+	uv pip install .
 
 release-s3: clean
-	pipenv run pip install setuptools wheel s3pypi
-	pipenv run python setup.py sdist bdist_wheel
-	pipenv run s3pypi --verbose upload dist/* --bucket pipy.detalytics.com --put-root-index
+	uv pip install setuptools wheel s3pypi
+	uv run python setup.py sdist bdist_wheel
+	uvx s3pypi --verbose upload dist/* --bucket pipy.detalytics.com --put-root-index

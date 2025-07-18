@@ -17,16 +17,12 @@ on:
       checkout_token:
         required: true
 
-env:
-  PIPENV_VENV_IN_PROJECT: 1
-  PIPENV_DEFAULT_PYTHON_VERSION: 3.13
-
 jobs:
   # This workflow contains a single job called "build"
   package-update:
     # The type of runner that the job will run on
     runs-on: "${{ inputs.runs-on }}"
-    timeout-minutes: 20
+    timeout-minutes: 10
     env:
       env_base64: ${{ secrets.env_base64 }}
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -44,11 +40,9 @@ jobs:
       - uses: actions/setup-python@main
         with:
           python-version: ${{ inputs.python_version }}
-          check-latest: true
         if: runner.environment != 'self-hosted'
-      - name: install pipenv
-        run: |
-          curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
         if: runner.environment != 'self-hosted'
       - name: Pull pre-commit config
         run: |
@@ -56,14 +50,13 @@ jobs:
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/common.mk
       - name: install package
         run: |
-          pipenv --clear
-          pipenv update --dev
-          pipenv run pip list
+          uv lock --upgrade
         env:
-          REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
-      - uses: wangsha/pre-commit-github-action@main
-        with:
-          extra_args: --all-files
+          UV_INDEX_PRIVATE_REGISTRY_USERNAME: ${{ secrets.UV_INDEX_PRIVATE_REGISTRY_USERNAME }}
+          UV_INDEX_PRIVATE_REGISTRY_PASSWORD: ${{ secrets.UV_INDEX_PRIVATE_REGISTRY_PASSWORD }}
+      - name: format code
+        run: |
+          make format
         continue-on-error: true
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@main
