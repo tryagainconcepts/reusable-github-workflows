@@ -50,12 +50,14 @@ jobs:
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/common.mk
       - name: install package
         run: |
+          IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
+          echo "Registry password length: ${#PASSWORD}"
+          export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
           echo "Registry username: $UV_INDEX_PRIVATE_REGISTRY_USERNAME"
           uv venv
           uv lock --upgrade
         env:
-          UV_INDEX_PRIVATE_REGISTRY_USERNAME: ${{ secrets.UV_INDEX_PRIVATE_REGISTRY_USERNAME }}
-          UV_INDEX_PRIVATE_REGISTRY_PASSWORD: ${{ secrets.UV_INDEX_PRIVATE_REGISTRY_PASSWORD }}
+          REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: format code
         run: |
           make format
