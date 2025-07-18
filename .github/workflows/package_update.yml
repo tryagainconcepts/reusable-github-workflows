@@ -53,6 +53,7 @@ jobs:
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
           echo "Registry password length: ${#PASSWORD}"
           export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
+          export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
           echo "Registry username: $UV_INDEX_PRIVATE_REGISTRY_USERNAME"
           uv venv
           uv lock --upgrade
