@@ -99,6 +99,7 @@ jobs:
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
           export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
           export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
+          echo "Registry username: $UV_INDEX_PRIVATE_REGISTRY_USERNAME"
           uv venv
           make config-test
         env:
