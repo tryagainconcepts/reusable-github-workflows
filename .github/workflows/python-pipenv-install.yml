@@ -50,9 +50,6 @@ on:
       env_base64:
         required: false
 
-env:
-  PIPENV_VENV_IN_PROJECT: 1
-  PIPENV_DEFAULT_PYTHON_VERSION: 3.13
 jobs:
   build-test-deploy:
     name: Build Test and Deploy
@@ -77,20 +74,16 @@ jobs:
           python-version: ${{ inputs.python_version }}
           check-latest: true
         if: runner.environment != 'self-hosted'
-      - name: install pipenv
-        run: |
-          curl https://raw.githubusercontent.com/pypa/pipenv/master/get-pipenv.py | python
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
         if: runner.environment != 'self-hosted'
       - name: Pull pre-commit config
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
         if: github.ref != 'refs/heads/main'
-      - uses: wangsha/pre-commit-github-action@main
-        with:
-          extra_args: --all-files
+      - name: format code
+        run: make format
         if: github.ref != 'refs/heads/main'
-        continue-on-error: true
-        timeout-minutes: 1
       - uses: stefanzweifel/git-auto-commit-action@master
         with:
           commit_message: Automated Changes from pre-commit hooks
@@ -103,9 +96,10 @@ jobs:
           echo github ref: ${{ github.ref }}
       - name: install package
         run: |
-          pipenv --clear
-          pipenv sync --dev
-          pipenv run pip list
+          IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
+          export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
+          export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
+          make config-test
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: Start MongoDB
@@ -143,8 +137,8 @@ jobs:
         run: |
           git config --global user.email "bumpversion@example.com"
           git config --global user.name "versionbump"
-          pipenv run pip install --upgrade bump-my-version
-          pipenv run bump-my-version bump ${DEFAULT_BUMP}
+          pip install --upgrade bump-my-version
+          bump-my-version bump ${DEFAULT_BUMP}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEFAULT_BUMP: minor

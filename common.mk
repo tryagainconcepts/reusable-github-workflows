@@ -28,7 +28,7 @@ lint:
 	uvx pre-commit run --all-files
 
 test: lint ## run tests quickly with the default Python
-	uvx python -m pytest -v -l tests
+	uv run python -m pytest -v -l tests
 
 clean: clean-build clean-pyc
 
@@ -46,20 +46,21 @@ clean-pyc:
 
 config-test:
 	uv pip install ".[dev]"
+	uv sync --all-extras
 
 config-develop:
 	uv pip install ".[dev]"
 	uv pip install pre-commit
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
-	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/pyproject.toml
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/common.mk
 	uvx pre-commit install
 	uvx pre-commit run --all-files
 
 config:
 	uv pip install .
+	un sync
 
 release-s3: clean
-	uv pip install setuptools wheel s3pypi
-	uv run python setup.py sdist bdist_wheel
-	uvx s3pypi --verbose upload dist/* --bucket pipy.detalytics.com --put-root-index
+	uv pip install s3pypi
+	uv build
+	s3pypi --verbose upload dist/* --bucket pipy.detalytics.com --put-root-index

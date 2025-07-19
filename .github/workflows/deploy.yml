@@ -65,12 +65,11 @@ jobs:
       - name: install package
         run: |
             IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
-            echo "Registry password length: ${#PASSWORD}"
             export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
             export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
-            echo "Registry username: $UV_INDEX_PRIVATE_REGISTRY_USERNAME"
             uv venv
             uv pip install .
+            uv sync
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: deploy
