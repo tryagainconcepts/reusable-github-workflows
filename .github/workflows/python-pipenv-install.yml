@@ -140,11 +140,10 @@ jobs:
         run: |
           git config --global user.email "bumpversion@example.com"
           git config --global user.name "versionbump"
-          pip install --upgrade bump-my-version
-          bump-my-version bump ${DEFAULT_BUMP}
+          uv tool install bump-my-version
+          uvx bump-my-version bump minor
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEFAULT_BUMP: minor
       - name: Push new version tag
         if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
         uses: ad-m/github-push-action@master
