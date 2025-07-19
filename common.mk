@@ -45,11 +45,10 @@ clean-pyc:
 
 
 config-test:
-	uv pip install ".[dev]"
 	uv sync --all-extras
 
 config-develop:
-	uv pip install ".[dev]"
+	uv sync --all-extras
 	uv pip install pre-commit
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/common.mk
@@ -57,8 +56,7 @@ config-develop:
 	uvx pre-commit run --all-files
 
 config:
-	uv pip install .
-	un sync
+	uv sync
 
 release-s3: clean
 	uv pip install s3pypi
