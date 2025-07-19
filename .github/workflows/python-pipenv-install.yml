@@ -141,7 +141,7 @@ jobs:
           git config --global user.email "bumpversion@example.com"
           git config --global user.name "versionbump"
           uv tool install bump-my-version
-          uvx bump-my-version bump minor
+          uvx bump-my-version bump minor pyproject.toml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Push new version tag
