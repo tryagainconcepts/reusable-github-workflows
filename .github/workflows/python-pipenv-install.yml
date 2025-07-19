@@ -101,6 +101,7 @@ jobs:
           export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
           echo "Registry username: $UV_INDEX_PRIVATE_REGISTRY_USERNAME"
           uv venv
+          source .venv/bin/activate
           make config-test
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
