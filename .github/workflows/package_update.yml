@@ -1,4 +1,4 @@
-name: 'Update Pipenv Package'
+name: 'Update Python Package'
 
 on:
   workflow_call:
