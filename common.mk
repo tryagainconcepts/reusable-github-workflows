@@ -59,6 +59,6 @@ config:
 	uv sync
 
 release-s3: clean
-	uv pip install s3pypi
+	pip install s3pypi
 	uv build
 	s3pypi --verbose upload dist/* --bucket pipy.detalytics.com --put-root-index
