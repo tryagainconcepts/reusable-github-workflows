@@ -67,7 +67,7 @@ jobs:
         with:
           base: main
           token: ${{ secrets.checkout_token }}
-          title: '[Automated] Update Pipenv Package'
+          title: '[Automated] Update Python Package'
           labels: |
             automated
             automerge

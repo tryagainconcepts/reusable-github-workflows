@@ -13,9 +13,6 @@ on:
         required: true
         default: 'warning'
 
-env:
-  PIPENV_VENV_IN_PROJECT: 1
-  PIPENV_DEFAULT_PYTHON_VERSION: 3.13
 
 jobs:
   pre-commit:
