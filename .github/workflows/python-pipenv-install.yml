@@ -109,9 +109,9 @@ jobs:
         uses: supercharge/mongodb-github-action@1.8.0
         if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
       - name: Setup ENV
-        if: ${{ env.env_base64 != '' }}
         run: |
-          echo ${{ env.env_base64 }} | base64 -d > .env
+          echo ${{ env.env_base64 }} | base64 -d > .env | source .env
+        if: ${{ env.env_base64 != '' }}
       - name: run test
         if: inputs.test_script
         run: ${{ inputs.test_script }}
