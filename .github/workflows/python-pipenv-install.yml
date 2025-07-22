@@ -129,7 +129,12 @@ jobs:
           ref: main
       - name: deploy
         if: inputs.deploy_script && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged')
-        run: ${{ inputs.deploy_script }}
+        run: |
+          IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
+          export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
+          export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
+          echo "Registry username: $UV_INDEX_PRIVATE_REGISTRY_USERNAME"
+          ${{ inputs.deploy_script }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
@@ -140,10 +145,16 @@ jobs:
         run: |
           git config --global user.email "bumpversion@example.com"
           git config --global user.name "versionbump"
+          IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
+          export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
+          export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
+          echo "Registry username: $UV_INDEX_PRIVATE_REGISTRY_USERNAME"
           uv version --bump minor
           git add pyproject.toml uv.lock
           git commit -m "Bump version to $(uv version --short)"
           git tag -a "$(uv version --short)" -m "Release $(uv version --short)"
+        env:
+          REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: Push new version tag
         if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
         uses: ad-m/github-push-action@master
