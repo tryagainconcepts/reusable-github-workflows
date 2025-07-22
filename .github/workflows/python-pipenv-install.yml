@@ -140,10 +140,10 @@ jobs:
         run: |
           git config --global user.email "bumpversion@example.com"
           git config --global user.name "versionbump"
-          uv tool install bump-my-version
-          uv run bump-my-version bump minor pyproject.toml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          uv version --bump minor
+          git add pyproject.toml uv.lock
+          git commit -m "Bump version to $(uv version --short)"
+          git tag -a "$(uv version --short)" -m "Release $(uv version --short)"
       - name: Push new version tag
         if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
         uses: ad-m/github-push-action@master
