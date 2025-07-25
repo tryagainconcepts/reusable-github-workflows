@@ -18,6 +18,10 @@ on:
         type: string
         required: false
         default: self-hosted
+      timeout-minutes:
+        type: number
+        required: false
+        default: 10
     secrets:
       slack_webhook_url:
         description: "notify slack on github action result"
@@ -35,7 +39,7 @@ jobs:
   deploy:
     name: Pass input and secrets to my-action
     runs-on: "${{ inputs.runs-on }}"
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       env_base64: ${{ secrets.env_base64 }}
     steps:
