@@ -122,13 +122,6 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
 
-      - name: automerge on PR labelled with automerge
-        id: automerge
-        if: github.ref != 'refs/heads/main'
-        uses: "pascalgn/automerge-action@main"
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          MERGE_LABELS: "automerge,!work in progress"
       - name: switch to main branch
         if: steps.automerge.outputs.mergeResult == 'merged'
         uses: actions/checkout@main
@@ -169,7 +162,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           force: true
       - name: Release pypi on main branch
-        if: inputs.pypi_release && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged')
         run: |
           make release-s3
         env:
