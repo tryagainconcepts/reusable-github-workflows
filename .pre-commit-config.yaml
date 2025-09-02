@@ -18,9 +18,6 @@ repos:
           - '--no-sort-keys'
           - '--indent=4'
           - '--no-ensure-ascii'
-      - id: fix-encoding-pragma
-        args:
-          - '--remove'
   - repo: 'https://github.com/asottile/pyupgrade'
     rev: v3.20.0
     hooks:
