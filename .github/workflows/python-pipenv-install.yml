@@ -110,7 +110,9 @@ jobs:
         if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
       - name: Setup ENV
         run: |
-          echo ${{ env.env_base64 }} | base64 -d > .env | source .env
+          echo ${{ env.env_base64 }} | base64 -d > .env
+          # Make variables available to all subsequent steps in this job
+          cat .env >> "$GITHUB_ENV"
         if: ${{ env.env_base64 != '' }}
       - name: run test
         if: inputs.test_script
