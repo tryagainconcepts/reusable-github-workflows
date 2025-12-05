@@ -121,7 +121,6 @@ jobs:
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
           export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
           export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
-          cut -d '=' -f 1 .env | sed '/^\s*$/d'
           ${{ inputs.test_script }}
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
