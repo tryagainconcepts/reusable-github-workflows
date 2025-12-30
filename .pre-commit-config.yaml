@@ -1,8 +1,12 @@
+minimum_pre_commit_version: '3.7.0'
+default_language_version:
+  python: python3
 repos:
   - repo: 'https://github.com/pre-commit/pre-commit-hooks'
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+      - id: end-of-file-fixer
       - id: check-case-conflict
       - id: check-merge-conflict
       - id: check-symlinks
@@ -18,12 +22,13 @@ repos:
           - '--no-sort-keys'
           - '--indent=4'
           - '--no-ensure-ascii'
+        exclude: '(^|/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|Pipfile\.lock|poetry\.lock|composer\.lock)$'
   - repo: 'https://github.com/asottile/pyupgrade'
     rev: v3.21.2
     hooks:
       - id: pyupgrade
         args:
-          - '--py313-plus'
+          - '--py314-plus'
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
     rev: v0.14.10
@@ -34,4 +39,4 @@ repos:
       # Run the linter.
       - id: ruff
         types_or: [ python, pyi ]
-        args: [ --fix ]
+        args: [ --fix, --exit-non-zero-on-fix ]

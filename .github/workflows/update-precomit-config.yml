@@ -35,5 +35,6 @@ jobs:
           labels: |
             automated
             dependencies
+            automerge
           add-paths: |
             .pre-commit-config.yaml
