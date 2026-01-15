@@ -62,3 +62,8 @@ release-s3: clean
 	pip install --upgrade s3pypi
 	uv build
 	s3pypi --verbose upload dist/* --bucket pipy.detalytics.com --put-root-index
+
+upgrade-packages:
+	uv lock --upgrade
+	git commit -a -m 'automated package update'
+	git push origin automated-package-update

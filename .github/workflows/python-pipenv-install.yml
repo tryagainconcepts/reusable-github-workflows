@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       python_version:
-        default: '3.14'
+        default: "3.14"
         required: false
         type: string
       test_script:
@@ -29,10 +29,6 @@ on:
         required: false
         default: "ap-southeast-1"
         type: string
-      pipenv_setup_check:
-        required: false
-        default: true
-        type: boolean
       runs-on:
         type: string
         required: false
@@ -87,7 +83,7 @@ jobs:
       - uses: stefanzweifel/git-auto-commit-action@master
         with:
           commit_message: Automated Changes from pre-commit hooks
-          file_pattern: ':!.github/'
+          file_pattern: ":!.github/"
         if: github.ref != 'refs/heads/main'
       # Runs a single command using the runners shell
       - name: Run a one-line script
@@ -188,14 +184,14 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }} # required
         if: always()
   changelog:
-      name: Changelog
-      runs-on: ubuntu-latest
-      timeout-minutes: 10
-      if: endsWith(github.ref, '/main')
-      needs: build-test-deploy
-      steps:
-        - uses: actions/checkout@main
-        - name: Add Changelog
-          uses: charity-detalytics/changelog-ci@main
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    name: Changelog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: endsWith(github.ref, '/main')
+    needs: build-test-deploy
+    steps:
+      - uses: actions/checkout@main
+      - name: Add Changelog
+        uses: charity-detalytics/changelog-ci@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,10 +1,10 @@
-name: 'Deploy'
+name: "Deploy"
 
 on:
   workflow_call:
     inputs:
       python_version:
-        default: '3.14'
+        default: "3.14"
         required: false
         type: string
       deploy_script:
@@ -65,15 +65,14 @@ jobs:
         run: |
           echo Hello, world!
           echo github ref: ${{ github.ref }}
-          echo pipenv-cache hit: ${{ steps.setup-python.outputs.cache-hit }}
       - name: install package
         run: |
-            IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
-            export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
-            export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
-            uv venv
-            uv pip install .
-            uv sync
+          IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
+          export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
+          export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
+          uv venv
+          uv pip install .
+          uv sync
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: deploy
