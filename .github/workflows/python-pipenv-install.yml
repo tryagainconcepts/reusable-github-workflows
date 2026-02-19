@@ -196,7 +196,30 @@ jobs:
     needs: build-test-deploy
     steps:
       - uses: actions/checkout@v6
-      - name: Add Changelog
-        uses: charity-detalytics/changelog-ci@v0.6.1
+      - name: Build Changelog
+        id: build_changelog
+        uses: mikepenz/release-changelog-builder-action@v6.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update CHANGELOG.md
+        env:
+          CHANGELOG_CONTENT: ${{ steps.build_changelog.outputs.changelog }}
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            cp CHANGELOG.md CHANGELOG.previous.md
+          fi
+
+          {
+            printf '## %s\n\n' "$(date -u +'%Y-%m-%d')"
+            printf '%s\n\n' "$CHANGELOG_CONTENT"
+            if [ -f CHANGELOG.previous.md ]; then
+              cat CHANGELOG.previous.md
+            fi
+          } > CHANGELOG.md
+
+          rm -f CHANGELOG.previous.md
+      - name: Commit Changelog
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "chore: update changelog"
+          file_pattern: CHANGELOG.md
