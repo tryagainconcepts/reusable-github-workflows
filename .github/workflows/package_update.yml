@@ -28,7 +28,7 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@main
+      - uses: actions/checkout@v6
         with:
           token: ${{ secrets.checkout_token }}
       - name: print github context
@@ -37,12 +37,12 @@ jobs:
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
         run: echo ${{ env.env_base64 }} | base64 -d > .env && source .env
-      - uses: actions/setup-python@main
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python_version }}
         if: runner.environment != 'self-hosted'
       - name: Setup uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         if: runner.environment != 'self-hosted'
       - name: Pull pre-commit config
         run: |
@@ -63,7 +63,7 @@ jobs:
         run: |
           make format
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@main
+        uses: peter-evans/create-pull-request@v8
         with:
           base: main
           token: ${{ secrets.checkout_token }}
