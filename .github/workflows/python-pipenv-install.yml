@@ -46,6 +46,12 @@ on:
       env_base64:
         required: false
 
+# Least-privilege token: only what the jobs below actually need
+# (automerge + tag/changelog commits need write; everything else read).
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   build-test-deploy:
     name: Build Test and Deploy
@@ -56,12 +62,19 @@ jobs:
     steps:
       - id: checkout
         uses: actions/checkout@v6
-      - name: print github context
+      - name: print build context
         run: |
-          echo '${{ toJSON(steps.checkout.outputs) }}'
-          echo $JSON
+          echo "repository = $GH_REPOSITORY"
+          echo "ref        = $GH_REF"
+          echo "actor      = $GH_ACTOR"
+          echo "event      = $GH_EVENT_NAME"
+          echo "sha        = $GH_SHA"
         env:
-          JSON: ${{ toJSON(github) }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_REF: ${{ github.ref }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_EVENT_NAME: ${{ github.event_name }}
+          GH_SHA: ${{ github.sha }}
       - uses: actions/setup-python@v6
         id: setup-python
         with:
@@ -193,7 +206,14 @@ jobs:
     if: endsWith(github.ref, '/main')
     needs: build-test-deploy
     steps:
+      # Check out the tip of main (includes the version-bump commit the
+      # build-test-deploy job just pushed) so the changelog commit is a
+      # fast-forward and not a divergent push. fetch-depth: 0 gives the
+      # changelog builder full tag history.
       - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
       - name: Build Changelog
         id: build_changelog
         uses: mikepenz/release-changelog-builder-action@v6.1.0

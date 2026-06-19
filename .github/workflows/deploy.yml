@@ -35,6 +35,10 @@ on:
       pipy_registry_auth:
         required: false
 
+# Deploy only reads the repo; no write scope needed.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Pass input and secrets to my-action
@@ -48,9 +52,17 @@ jobs:
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
         run: echo "$env_base64" | base64 -d > .env && source .env
-      - name: print github context
+      - name: print build context
         run: |
-          echo '${{ toJSON(github) }}'
+          echo "repository = $GH_REPOSITORY"
+          echo "ref        = $GH_REF"
+          echo "actor      = $GH_ACTOR"
+          echo "event      = $GH_EVENT_NAME"
+        env:
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_REF: ${{ github.ref }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_EVENT_NAME: ${{ github.event_name }}
       - uses: actions/setup-python@v6
         id: setup-python
         with:
