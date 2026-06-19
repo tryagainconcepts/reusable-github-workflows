@@ -95,7 +95,7 @@ jobs:
         if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
       - name: Setup ENV
         run: |
-          echo "${{ env.env_base64 }}" | base64 -d > .env
+          echo "$env_base64" | base64 -d > .env
           cut -d '=' -f 1 .env | sed '/^\s*$/d'
           cat .env >> "$GITHUB_ENV"
           source .env
@@ -122,6 +122,15 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: main
+      - name: Debug deploy conditions
+        if: always()
+        run: |
+          echo "github.ref                 = ${{ github.ref }}"
+          echo "endsWith(ref, '/main')     = ${{ endsWith(github.ref, '/main') }}"
+          echo "automerge mergeResult       = ${{ steps.automerge.outputs.mergeResult }}"
+          echo "inputs.deploy_script set?   = ${{ inputs.deploy_script != '' }}"
+          echo "inputs.pypi_release         = ${{ inputs.pypi_release }}"
+          echo "deploy step will run?       = ${{ inputs.deploy_script != '' && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged') }}"
       - name: deploy
         if: inputs.deploy_script && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged')
         run: |
@@ -155,7 +164,7 @@ jobs:
         uses: ad-m/github-push-action@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          force: true
+          tags: true
       - name: Release pypi on main branch
         if: inputs.pypi_release && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged')
         run: |

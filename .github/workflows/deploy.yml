@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v6
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
-        run: echo ${{ env.env_base64 }} | base64 -d > .env && source .env
+        run: echo "$env_base64" | base64 -d > .env && source .env
       - name: print github context
         run: |
           echo '${{ toJSON(github) }}'

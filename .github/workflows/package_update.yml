@@ -16,6 +16,8 @@ on:
         required: false
       checkout_token:
         required: true
+      env_base64:
+        required: false
 
 jobs:
   # This workflow contains a single job called "build"
@@ -36,7 +38,7 @@ jobs:
           echo '${{ toJSON(github) }}'
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
-        run: echo ${{ env.env_base64 }} | base64 -d > .env && source .env
+        run: echo "$env_base64" | base64 -d > .env && source .env
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python_version }}
