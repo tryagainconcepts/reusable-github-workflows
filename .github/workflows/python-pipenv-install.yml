@@ -54,8 +54,6 @@ jobs:
     env:
       env_base64: ${{ secrets.env_base64 }}
     steps:
-      - uses: supercharge/redis-github-action@1.8.1
-        if: inputs.setup_redis && inputs.runs-on != 'self-hosted'
       - id: checkout
         uses: actions/checkout@v6
       - name: print github context
@@ -77,15 +75,6 @@ jobs:
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
         if: github.ref != 'refs/heads/main'
-      - name: format code
-        run: make format
-        if: github.ref != 'refs/heads/main'
-      - uses: stefanzweifel/git-auto-commit-action@v7
-        with:
-          commit_message: Automated Changes from pre-commit hooks
-          file_pattern: ":!.github/"
-        if: github.ref != 'refs/heads/main'
-      # Runs a single command using the runners shell
       - name: Run a one-line script
         run: |
           echo Hello, world!
