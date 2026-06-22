@@ -94,6 +94,7 @@ jobs:
         run: |
           echo Hello, world!
           echo github ref: ${{ github.ref }}
+      - uses: pre-commit/action@v3.0.1
       - name: install package
         run: |
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
