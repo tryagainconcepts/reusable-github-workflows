@@ -57,11 +57,11 @@ jobs:
       env_base64: ${{ secrets.env_base64 }}
     steps:
       - id: checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - name: View context attributes
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: console.log(context)
       - name: print build context
@@ -77,14 +77,14 @@ jobs:
           GH_ACTOR: ${{ github.actor }}
           GH_EVENT_NAME: ${{ github.event_name }}
           GH_SHA: ${{ github.sha }}
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         id: setup-python
         with:
           python-version: ${{ inputs.python_version }}
           check-latest: true
         if: runner.environment != 'self-hosted'
       - name: Setup uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         if: runner.environment != 'self-hosted'
       - name: Pull pre-commit config
         run: |
@@ -94,7 +94,7 @@ jobs:
         run: |
           echo Hello, world!
           echo github ref: ${{ github.ref }}
-      - uses: pre-commit/action@v3.0.1
+      - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
       - name: install package
         run: |
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
@@ -106,7 +106,7 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.12.1
+        uses: supercharge/mongodb-github-action@315db7fe45ac2880b7758f1933e6e5d59afd5e94 # 1.12.1
         if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
       - name: Setup ENV
         run: |
@@ -128,13 +128,13 @@ jobs:
       - name: automerge on PR labelled with automerge
         id: automerge
         if: github.ref != 'refs/heads/main'
-        uses: "pascalgn/automerge-action@v0.16.4"
+        uses: pascalgn/automerge-action@7961b8b5eec56cc088c140b56d864285eabd3f67 # v0.16.4
         env:
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           MERGE_LABELS: "automerge,!work in progress"
       - name: switch to main branch
         if: steps.automerge.outputs.mergeResult == 'merged'
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: main
           persist-credentials: false
@@ -176,7 +176,7 @@ jobs:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: Push new version tag
         if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
-        uses: ad-m/github-push-action@v1
+        uses: ad-m/github-push-action@881a6320fdb16eb5318c5054f31c218aec2b324c # v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tags: true
@@ -189,7 +189,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
       - name: Notify Slack
-        uses: slackapi/slack-github-action@v3.0.3
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
           webhook: ${{ secrets.slack_webhook_url }}
           webhook-type: incoming-webhook
@@ -212,17 +212,17 @@ jobs:
       # build-test-deploy job just pushed) so the changelog commit is a
       # fast-forward and not a divergent push. fetch-depth: 0 gives the
       # changelog builder full tag history.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: main
           fetch-depth: 0
       - name: View context attributes
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: console.log(context)
       - name: Build Changelog
         id: build_changelog
-        uses: mikepenz/release-changelog-builder-action@v6.1.0
+        uses: mikepenz/release-changelog-builder-action@6faf020194b7c8853f9e55c4fd92e40b02122a04 # v6.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Update CHANGELOG.md
@@ -243,7 +243,7 @@ jobs:
 
           rm -f CHANGELOG.previous.md
       - name: Commit Changelog
-        uses: stefanzweifel/git-auto-commit-action@v7
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7
         with:
           commit_message: "chore: update changelog [skip ci]"
           file_pattern: CHANGELOG.md

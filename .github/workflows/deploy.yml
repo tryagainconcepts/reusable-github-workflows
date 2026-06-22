@@ -48,11 +48,11 @@ jobs:
       env_base64: ${{ secrets.env_base64 }}
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
       - name: View context attributes
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: console.log(context)
       - name: Setup ENV
@@ -69,14 +69,14 @@ jobs:
           GH_REF: ${{ github.ref }}
           GH_ACTOR: ${{ github.actor }}
           GH_EVENT_NAME: ${{ github.event_name }}
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         id: setup-python
         with:
           python-version-file: "pyproject.toml"
           check-latest: true
         if: runner.environment != 'self-hosted'
       - name: Setup uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         if: runner.environment != 'self-hosted'
       # Runs a single command using the runners shell
       - name: Run a one-line script
@@ -117,7 +117,7 @@ jobs:
           printf 'COMMIT_MSG=%s\n' "$MSG" >> "$GITHUB_ENV"
       - name: Notify Slack
         if: always()
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
           webhook: ${{ secrets.slack_webhook_url }}
           webhook-type: incoming-webhook
