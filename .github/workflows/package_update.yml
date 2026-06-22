@@ -39,17 +39,10 @@ jobs:
         with:
           token: ${{ secrets.checkout_token }}
           persist-credentials: false
-      - name: print build context
-        run: |
-          echo "repository = $GH_REPOSITORY"
-          echo "ref        = $GH_REF"
-          echo "actor      = $GH_ACTOR"
-          echo "event      = $GH_EVENT_NAME"
-        env:
-          GH_REPOSITORY: ${{ github.repository }}
-          GH_REF: ${{ github.ref }}
-          GH_ACTOR: ${{ github.actor }}
-          GH_EVENT_NAME: ${{ github.event_name }}
+      - name: View context attributes
+        uses: actions/github-script@v9
+        with:
+          script: console.log(context)
       - name: Setup ENV
         if: ${{ env.env_base64 != '' }}
         run: echo "$env_base64" | base64 -d > .env && source .env
@@ -91,10 +84,3 @@ jobs:
             automated
             automerge
         if: always()
-      - name: Enable Pull Request Automerge
-        if: steps.cpr.outputs.pull-request-operation == 'created'
-        uses: peter-evans/enable-pull-request-automerge@v3
-        with:
-          token: ${{ secrets.checkout_token }}
-          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
-          merge-method: squash

@@ -17,10 +17,14 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: View context attributes
+        uses: actions/github-script@v9
+        with:
+          script: console.log(context)
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.14'
       - name: Install pre-commit
         run: python -m pip install --upgrade pre-commit
       - name: Update hooks
