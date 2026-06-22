@@ -35,9 +35,10 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           token: ${{ secrets.checkout_token }}
+          persist-credentials: false
       - name: print build context
         run: |
           echo "repository = $GH_REPOSITORY"
@@ -66,10 +67,12 @@ jobs:
       - name: install package
         run: |
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
-          echo "Registry password length: ${#PASSWORD}"
+          # Mask the split halves so they can't surface in logs (the combined
+          # secret is masked by GitHub, but the parsed parts are not).
+          echo "::add-mask::$USERNAME"
+          echo "::add-mask::$PASSWORD"
           export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
           export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
-          echo "Registry username: $UV_INDEX_PRIVATE_REGISTRY_USERNAME"
           uv venv
           uv lock --upgrade
         env:
