@@ -47,8 +47,12 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  security-events: write
+  actions: read
 
 jobs:
+  osv-scan:
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@v2.3.8"
   build-test-deploy:
     name: Build Test and Deploy
     runs-on: "${{ inputs.runs-on }}"
@@ -255,7 +259,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: endsWith(github.ref, '/main')
-    needs: build-test-deploy
+    needs: 
+      - build-test-deploy
+      - osv-scan
     steps:
       # Check out the tip of main (includes the version-bump commit the
       # build-test-deploy job just pushed) so the changelog commit is a
