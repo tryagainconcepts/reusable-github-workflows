@@ -105,6 +105,13 @@ jobs:
           make config-test
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
+      - name: Audit dependencies for known vulnerabilities
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
+        with:
+          # Audit the environment we just built rather than re-resolving, so
+          # this step needs no private-registry credentials. Fails the job if
+          # any installed dependency has a known advisory.
+          virtual-environment: .venv
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@315db7fe45ac2880b7758f1933e6e5d59afd5e94 # 1.12.1
         if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
