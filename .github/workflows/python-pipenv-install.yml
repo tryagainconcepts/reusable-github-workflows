@@ -262,7 +262,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: endsWith(github.ref, '/main')
-    needs: 
+    needs:
       - build-test-deploy
     steps:
       # Check out the tip of main (includes the version-bump commit the
