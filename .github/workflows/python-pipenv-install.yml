@@ -100,7 +100,9 @@ jobs:
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
           export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
           export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
-          uv venv
+          # gh-action-pip-audit invokes this environment with `python -m pip`.
+          # uv environments are unseeded by default, so explicitly install pip.
+          uv venv --seed
           source .venv/bin/activate
           make config-test
         env:
