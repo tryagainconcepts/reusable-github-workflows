@@ -23,20 +23,12 @@ repos:
           - '--indent=4'
           - '--no-ensure-ascii'
         exclude: '(^|/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|Pipfile\.lock|poetry\.lock|composer\.lock)$'
-  - repo: 'https://github.com/asottile/pyupgrade'
-    rev: v3.21.2
-    hooks:
-      - id: pyupgrade
-        args:
-          - '--py314-plus'
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.15.18
+    rev: v0.16.3
     hooks:
-      # Run the formatter.
+    # Run the linter.
+      - id: ruff-check
+        args: [ --fix ]
+    # Run the formatter.
       - id: ruff-format
-        types_or: [ python, pyi ]
-      # Run the linter.
-      - id: ruff
-        types_or: [ python, pyi ]
-        args: [ --fix, --exit-non-zero-on-fix ]

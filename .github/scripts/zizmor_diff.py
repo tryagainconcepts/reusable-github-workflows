@@ -37,8 +37,10 @@ def main() -> int:
     fixed = [k for k in before if k not in after]
 
     lines = [
-        f"zizmor findings: {len(before)} before, {len(after)} after "
-        f"({len(new)} new, {len(fixed)} resolved)."
+        (
+            f"zizmor findings: {len(before)} before, {len(after)} after "
+            f"({len(new)} new, {len(fixed)} resolved)."
+        )
     ]
     if new:
         lines += [
