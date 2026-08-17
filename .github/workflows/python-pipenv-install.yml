@@ -94,7 +94,15 @@ jobs:
         run: |
           echo Hello, world!
           echo github ref: ${{ github.ref }}
-      - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+      # pre-commit/action is maintenance-only; run pre-commit directly via uvx instead.
+      - name: Cache pre-commit hook environments
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: runner.environment != 'self-hosted'
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Run pre-commit
+        run: uvx pre-commit run --show-diff-on-failure --color=always --all-files
       - name: install package
         run: |
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
@@ -134,13 +142,60 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
 
+      # Replaces pascalgn/automerge-action (unmaintained, node20). Same contract:
+      # merge open PRs for this commit labelled "automerge" and not "work in progress",
+      # and expose mergeResult=merged|skipped|not_merged for the deploy steps below.
       - name: automerge on PR labelled with automerge
         id: automerge
         if: github.ref != 'refs/heads/main'
-        uses: pascalgn/automerge-action@7961b8b5eec56cc088c140b56d864285eabd3f67 # v0.16.4
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          MERGE_LABELS: "automerge,!work in progress"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const REQUIRED = "automerge";
+            const BLOCKING = "work in progress";
+            const RETRIES = 6;
+            const RETRY_SLEEP_MS = 5000;
+
+            let prs;
+            if (context.payload.pull_request) {
+              prs = [context.payload.pull_request];
+            } else {
+              ({ data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner, repo, commit_sha: context.sha,
+              }));
+            }
+            const candidates = prs.filter((pr) => {
+              const labels = pr.labels.map((l) => l.name);
+              return pr.state === "open" && labels.includes(REQUIRED) && !labels.includes(BLOCKING);
+            });
+            if (candidates.length === 0) {
+              core.info(`No open PR for ${context.sha} labelled "${REQUIRED}"; skipping.`);
+              core.setOutput("mergeResult", "skipped");
+              return;
+            }
+
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            let result = "not_merged";
+            for (const pr of candidates) {
+              for (let attempt = 1; attempt <= RETRIES; attempt++) {
+                try {
+                  await github.rest.pulls.merge({
+                    owner, repo, pull_number: pr.number, merge_method: "merge",
+                  });
+                  core.info(`Merged PR #${pr.number}`);
+                  result = "merged";
+                  break;
+                } catch (err) {
+                  // 405 = not mergeable yet (checks/conflicts), 409 = head moved; retry those.
+                  const retryable = err.status === 405 || err.status === 409;
+                  core.warning(`PR #${pr.number} merge attempt ${attempt}/${RETRIES} failed: ${err.message}`);
+                  if (!retryable || attempt === RETRIES) break;
+                  await sleep(RETRY_SLEEP_MS);
+                }
+              }
+            }
+            core.setOutput("mergeResult", result);
       - name: switch to main branch
         if: steps.automerge.outputs.mergeResult == 'merged'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
