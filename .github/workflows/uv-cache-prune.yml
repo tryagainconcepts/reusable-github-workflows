@@ -1,0 +1,32 @@
+name: Prune uv cache on self-hosted runners
+
+on:
+  schedule:
+    - cron: '0 4 2 * *' # Second day of every month at 04:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  prune:
+    runs-on: self-hosted
+    timeout-minutes: 15
+    steps:
+      - name: Prune unused uv cache entries
+        run: |
+          set -euo pipefail
+          if ! command -v uv >/dev/null 2>&1; then
+            echo "::error::uv is not installed on this runner"
+            exit 1
+          fi
+          CACHE_DIR="$(uv cache dir)"
+          before="$(du -sh "$CACHE_DIR" 2>/dev/null | cut -f1 || echo '0')"
+          uv cache prune
+          after="$(du -sh "$CACHE_DIR" 2>/dev/null | cut -f1 || echo '0')"
+          {
+            echo "### uv cache prune"
+            echo
+            echo "| Runner | Cache dir | Before | After |"
+            echo "|---|---|---|---|"
+            echo "| \`$RUNNER_NAME\` | \`$CACHE_DIR\` | $before | $after |"
+          } >> "$GITHUB_STEP_SUMMARY"
