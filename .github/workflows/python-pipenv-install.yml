@@ -95,12 +95,6 @@ jobs:
           echo Hello, world!
           echo github ref: ${{ github.ref }}
       # pre-commit/action is maintenance-only; run pre-commit directly via uvx instead.
-      - name: Cache pre-commit hook environments
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: runner.environment != 'self-hosted'
-        with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Run pre-commit
         run: uvx pre-commit run --show-diff-on-failure --color=always --all-files
       - name: install package
