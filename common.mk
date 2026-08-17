@@ -22,7 +22,6 @@ format:
 	uvx pre-commit run --all-files
 
 lint:
-	uv pip install ruff
 	uvx ruff check . --exclude "*.ipynb"
 	uvx pre-commit install
 	uvx pre-commit run --all-files
@@ -47,7 +46,6 @@ config-test:
 
 config-develop:
 	uv sync --all-extras
-	uv pip install pre-commit
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/common.mk
 	uvx pre-commit install
@@ -57,9 +55,8 @@ config:
 	uv sync
 
 release-s3: clean
-	pip install --upgrade s3pypi
 	uv build
-	s3pypi --verbose upload dist/* --bucket pipy.detalytics.com --put-root-index
+	uvx s3pypi --verbose upload dist/* --bucket pipy.detalytics.com --put-root-index
 
 upgrade-packages:
 	uv lock --upgrade

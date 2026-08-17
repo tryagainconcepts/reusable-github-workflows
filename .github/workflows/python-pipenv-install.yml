@@ -77,15 +77,12 @@ jobs:
           GH_ACTOR: ${{ github.actor }}
           GH_EVENT_NAME: ${{ github.event_name }}
           GH_SHA: ${{ github.sha }}
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        id: setup-python
-        with:
-          python-version: ${{ inputs.python_version }}
-          check-latest: true
-        if: runner.environment != 'self-hosted'
+      # uv provisions both itself and the Python interpreter on every runner
+      # (hosted and self-hosted), so workflows never depend on the machine's Python.
       - name: Setup uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        if: runner.environment != 'self-hosted'
+        with:
+          python-version: ${{ inputs.python_version }}
       - name: Pull pre-commit config
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
@@ -94,26 +91,26 @@ jobs:
         run: |
           echo Hello, world!
           echo github ref: ${{ github.ref }}
-      - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
+      # pre-commit/action is maintenance-only; run pre-commit directly via uvx instead.
+      - name: Run pre-commit
+        run: uvx pre-commit run --show-diff-on-failure --color=always --all-files
       - name: install package
         run: |
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
           export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
           export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
-          # gh-action-pip-audit invokes this environment with `python -m pip`.
-          # uv environments are unseeded by default, so explicitly install pip.
-          uv venv --seed
-          source .venv/bin/activate
           make config-test
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: Audit dependencies for known vulnerabilities
-        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
-        with:
-          # Audit the environment we just built rather than re-resolving, so
-          # this step needs no private-registry credentials. Fails the job if
-          # any installed dependency has a known advisory.
-          virtual-environment: .venv
+        # Audit the locked, fully-pinned dependency set straight from uv.lock —
+        # no pip, no re-resolution, no private-registry credentials. Packages
+        # not on PyPI are skipped; any installed dependency with a known
+        # advisory fails the job.
+        run: |
+          uv export --frozen --all-extras --no-hashes --no-emit-project --quiet \
+            -o "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@315db7fe45ac2880b7758f1933e6e5d59afd5e94 # 1.12.1
         if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
@@ -134,13 +131,60 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
 
+      # Replaces pascalgn/automerge-action (unmaintained, node20). Same contract:
+      # merge open PRs for this commit labelled "automerge" and not "work in progress",
+      # and expose mergeResult=merged|skipped|not_merged for the deploy steps below.
       - name: automerge on PR labelled with automerge
         id: automerge
         if: github.ref != 'refs/heads/main'
-        uses: pascalgn/automerge-action@7961b8b5eec56cc088c140b56d864285eabd3f67 # v0.16.4
-        env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          MERGE_LABELS: "automerge,!work in progress"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const REQUIRED = "automerge";
+            const BLOCKING = "work in progress";
+            const RETRIES = 6;
+            const RETRY_SLEEP_MS = 5000;
+
+            let prs;
+            if (context.payload.pull_request) {
+              prs = [context.payload.pull_request];
+            } else {
+              ({ data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner, repo, commit_sha: context.sha,
+              }));
+            }
+            const candidates = prs.filter((pr) => {
+              const labels = pr.labels.map((l) => l.name);
+              return pr.state === "open" && labels.includes(REQUIRED) && !labels.includes(BLOCKING);
+            });
+            if (candidates.length === 0) {
+              core.info(`No open PR for ${context.sha} labelled "${REQUIRED}"; skipping.`);
+              core.setOutput("mergeResult", "skipped");
+              return;
+            }
+
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            let result = "not_merged";
+            for (const pr of candidates) {
+              for (let attempt = 1; attempt <= RETRIES; attempt++) {
+                try {
+                  await github.rest.pulls.merge({
+                    owner, repo, pull_number: pr.number, merge_method: "merge",
+                  });
+                  core.info(`Merged PR #${pr.number}`);
+                  result = "merged";
+                  break;
+                } catch (err) {
+                  // 405 = not mergeable yet (checks/conflicts), 409 = head moved; retry those.
+                  const retryable = err.status === 405 || err.status === 409;
+                  core.warning(`PR #${pr.number} merge attempt ${attempt}/${RETRIES} failed: ${err.message}`);
+                  if (!retryable || attempt === RETRIES) break;
+                  await sleep(RETRY_SLEEP_MS);
+                }
+              }
+            }
+            core.setOutput("mergeResult", result);
       - name: switch to main branch
         if: steps.automerge.outputs.mergeResult == 'merged'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

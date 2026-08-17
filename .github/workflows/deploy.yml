@@ -69,15 +69,12 @@ jobs:
           GH_REF: ${{ github.ref }}
           GH_ACTOR: ${{ github.actor }}
           GH_EVENT_NAME: ${{ github.event_name }}
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        id: setup-python
-        with:
-          python-version-file: "pyproject.toml"
-          check-latest: true
-        if: runner.environment != 'self-hosted'
+      # uv provisions both itself and the Python interpreter on every runner
+      # (hosted and self-hosted), so workflows never depend on the machine's Python.
       - name: Setup uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        if: runner.environment != 'self-hosted'
+        with:
+          python-version-file: "pyproject.toml"
       # Runs a single command using the runners shell
       - name: Run a one-line script
         run: |
