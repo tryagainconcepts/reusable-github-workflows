@@ -1,6 +1,8 @@
 minimum_pre_commit_version: '3.7.0'
-default_language_version:
-  python: python3.14
+# No default_language_version pin: hook environments are built with the
+# interpreter running pre-commit (uv's, per each repo's python_version).
+# A hard-coded `python3.14` requires an executable of that exact name on
+# PATH, which uv-managed interpreters are not.
 repos:
   - repo: 'https://github.com/pre-commit/pre-commit-hooks'
     rev: v6.0.0
