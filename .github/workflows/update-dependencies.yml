@@ -1,0 +1,146 @@
+name: Update dependencies
+
+# Weekly self-maintenance for this repo, in one run and one PR:
+#   1. pre-commit hooks  -> `pre-commit autoupdate` on .pre-commit-config.yaml
+#   2. GitHub Actions    -> bump SHA pins in .github/workflows/ to the latest release
+# Gated by zizmor (no *new* findings) and by the pre-commit hooks passing;
+# auto-merged when both are green, otherwise the PR is left open for review.
+
+on:
+  schedule:
+    - cron: '0 5 * * 1' # Every Monday at 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: '3.14'
+
+      # Baselines, so the gates below only fail on what this run introduces.
+      - name: zizmor 🌈 (baseline)
+        run: |
+          uvx zizmor --format json --no-exit-codes .github/workflows > "$RUNNER_TEMP/zizmor-before.json"
+          cp .pre-commit-config.yaml "$RUNNER_TEMP/pre-commit-before.yaml"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---- 1. pre-commit hooks -------------------------------------------------
+      - name: Update pre-commit hooks
+        run: |
+          uvx pre-commit autoupdate
+          uv run --no-project .github/scripts/precommit_diff.py \
+            "$RUNNER_TEMP/pre-commit-before.yaml" .pre-commit-config.yaml \
+            --summary "$RUNNER_TEMP/precommit-summary.md"
+
+      # ---- 2. GitHub Actions pins ------------------------------------------------
+      - name: Bump pinned GitHub Actions to latest release
+        run: uv run --no-project .github/scripts/bump_actions.py --summary "$RUNNER_TEMP/bump-summary.md"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---- Gates ------------------------------------------------------------------
+      # Updated hooks must pass on the repo (also validates the edited workflow YAML).
+      - name: Run pre-commit hooks
+        id: hooks
+        continue-on-error: true
+        run: uvx pre-commit run --all-files --show-diff-on-failure --color=always
+      # Online audits (impostor-commit, known-vulnerable-actions, ...) verify the new SHAs.
+      - name: zizmor 🌈 (after update)
+        run: |
+          uvx zizmor --format json --no-exit-codes .github/workflows > "$RUNNER_TEMP/zizmor-after.json"
+          uvx zizmor --no-exit-codes .github/workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: zizmor 🌈 gate — no new findings
+        id: gate
+        continue-on-error: true
+        run: |
+          uv run --no-project .github/scripts/zizmor_diff.py \
+            "$RUNNER_TEMP/zizmor-before.json" "$RUNNER_TEMP/zizmor-after.json" \
+            --summary "$RUNNER_TEMP/zizmor-summary.md"
+
+      # ---- Report + PR --------------------------------------------------------------
+      - name: Write PR body
+        run: |
+          {
+            echo 'Automated weekly dependency update.'
+            echo
+            echo '### pre-commit hooks'
+            echo
+            cat "$RUNNER_TEMP/precommit-summary.md"
+            echo
+            echo '### GitHub Actions'
+            echo
+            cat "$RUNNER_TEMP/bump-summary.md"
+            echo
+            echo '### Checks'
+            echo
+            if [ "$HOOKS_OUTCOME" = "success" ]; then
+              echo '- ✅ pre-commit hooks pass'
+            else
+              echo '- ❌ pre-commit hooks **failed** — see the workflow log'
+            fi
+            echo
+            echo '#### GitHub Actions Security Analysis with zizmor 🌈'
+            echo
+            cat "$RUNNER_TEMP/zizmor-summary.md"
+            echo
+            if [ "$GATE_OUTCOME" = "success" ] && [ "$HOOKS_OUTCOME" = "success" ]; then
+              echo '✅ All checks green — auto-merged.'
+            else
+              echo '⚠️ **Not** auto-merged; please review.'
+            fi
+          } > "$RUNNER_TEMP/pr-body.md"
+          {
+            echo '## Update dependencies'
+            echo
+            cat "$RUNNER_TEMP/pr-body.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          HOOKS_OUTCOME: ${{ steps.hooks.outcome }}
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          commit-message: 'chore: update pre-commit hooks and GitHub Actions pins'
+          title: 'chore: update dependencies'
+          body-path: ${{ runner.temp }}/pr-body.md
+          branch: chore/update-dependencies
+          branch-suffix: timestamp
+          labels: |
+            automated
+            dependencies
+          add-paths: |
+            .pre-commit-config.yaml
+            .github/workflows/*.yml
+            .github/workflows/*.yaml
+            .github/scripts/*.py
+
+      # main has no branch protection, so native auto-merge is unavailable; merge directly
+      # once both gates have passed. Bot-created PRs (GITHUB_TOKEN) never trigger the
+      # pull_request zizmor workflow, which is why the analysis runs in this job instead.
+      - name: Auto-merge
+        if: steps.cpr.outputs.pull-request-number != '' && steps.gate.outcome == 'success' && steps.hooks.outcome == 'success'
+        run: gh pr merge --merge --delete-branch "$PR_NUMBER"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+      - name: Fail if a gate did not pass
+        if: steps.gate.outcome == 'failure' || steps.hooks.outcome == 'failure'
+        run: |
+          echo "::error::pre-commit hooks or zizmor gate failed; PR left open for review."
+          exit 1
