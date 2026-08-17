@@ -1,0 +1,50 @@
+name: Update GitHub Actions pins
+
+on:
+  schedule:
+    - cron: '0 5 1 * *' # First day of every month at 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-actions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      - name: Bump pinned actions to latest release
+        run: python .github/scripts/bump_actions.py --summary "$RUNNER_TEMP/bump-summary.md"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Write PR body
+        run: |
+          {
+            echo 'Automated monthly bump of SHA-pinned GitHub Actions in `.github/workflows/` to their latest release.'
+            echo
+            cat "$RUNNER_TEMP/bump-summary.md"
+            echo
+            echo 'Please review the release notes for any **major** version bumps before merging.'
+          } > "$RUNNER_TEMP/pr-body.md"
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          commit-message: 'chore: bump pinned GitHub Actions'
+          title: 'chore: bump pinned GitHub Actions'
+          body-path: ${{ runner.temp }}/pr-body.md
+          branch: chore/bump-github-actions
+          branch-suffix: timestamp
+          labels: |
+            automated
+            dependencies
+          add-paths: |
+            .github/workflows/*.yml
+            .github/workflows/*.yaml
