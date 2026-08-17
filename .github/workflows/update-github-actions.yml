@@ -21,10 +21,35 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14'
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      # Baseline zizmor report so the gate below only fails on findings the bump introduces.
+      - name: zizmor 🌈 (baseline)
+        run: uvx zizmor --format json --no-exit-codes .github/workflows > "$RUNNER_TEMP/zizmor-before.json"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Bump pinned actions to latest release
         run: python .github/scripts/bump_actions.py --summary "$RUNNER_TEMP/bump-summary.md"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Online audits (impostor-commit, known-vulnerable-actions, ...) verify the new SHAs.
+      - name: zizmor 🌈 (after bump)
+        run: |
+          uvx zizmor --format json --no-exit-codes .github/workflows > "$RUNNER_TEMP/zizmor-after.json"
+          uvx zizmor --no-exit-codes .github/workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: zizmor 🌈 gate — no new findings
+        id: gate
+        continue-on-error: true
+        run: |
+          python .github/scripts/zizmor_diff.py \
+            "$RUNNER_TEMP/zizmor-before.json" "$RUNNER_TEMP/zizmor-after.json" \
+            --summary "$RUNNER_TEMP/zizmor-summary.md"
+
       - name: Write PR body
         run: |
           {
@@ -32,9 +57,25 @@ jobs:
             echo
             cat "$RUNNER_TEMP/bump-summary.md"
             echo
-            echo 'Please review the release notes for any **major** version bumps before merging.'
+            echo '### GitHub Actions Security Analysis with zizmor 🌈'
+            echo
+            cat "$RUNNER_TEMP/zizmor-summary.md"
+            echo
+            if [ "$GATE_OUTCOME" = "success" ]; then
+              echo '✅ No new zizmor findings — auto-merged.'
+            else
+              echo '❌ New zizmor findings — **not** auto-merged; please review.'
+            fi
           } > "$RUNNER_TEMP/pr-body.md"
+          {
+            echo '## GitHub Actions Security Analysis with zizmor 🌈'
+            echo
+            cat "$RUNNER_TEMP/zizmor-summary.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
       - name: Create Pull Request
+        id: cpr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           commit-message: 'chore: bump pinned GitHub Actions'
@@ -48,3 +89,19 @@ jobs:
           add-paths: |
             .github/workflows/*.yml
             .github/workflows/*.yaml
+
+      # main has no branch protection, so native auto-merge is unavailable; merge directly
+      # once the zizmor gate has passed. Bot-created PRs (GITHUB_TOKEN) never trigger the
+      # pull_request zizmor workflow, which is why the analysis runs in this job instead.
+      - name: Auto-merge
+        if: steps.cpr.outputs.pull-request-number != '' && steps.gate.outcome == 'success'
+        run: gh pr merge --merge --delete-branch "$PR_NUMBER"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+      - name: Fail on new zizmor findings
+        if: steps.gate.outcome == 'failure'
+        run: |
+          echo "::error::zizmor found new findings after the bump; PR left open for review."
+          exit 1
