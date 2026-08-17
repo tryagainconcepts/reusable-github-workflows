@@ -21,16 +21,14 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: console.log(context)
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: '3.14'
-      - name: Install pre-commit
-        run: python -m pip install --upgrade pre-commit
       - name: Update hooks
-        run: pre-commit autoupdate
+        run: uvx pre-commit autoupdate
       - name: Run hooks to validate the update
-        run: pre-commit run --all-files --show-diff-on-failure
+        run: uvx pre-commit run --all-files --show-diff-on-failure
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
