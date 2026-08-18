@@ -224,6 +224,10 @@ jobs:
           uv version --bump minor
           git add pyproject.toml uv.lock
           git commit -m "Bump version to $(uv version --short)"
+          # Self-hosted runners reuse the workspace; a tag left over from a run whose
+          # push was rejected would otherwise make `git tag` fail. The push below is
+          # non-forced, so a tag that really exists on the remote is still rejected there.
+          git tag -d "$(uv version --short)" 2>/dev/null || true
           git tag -a "$(uv version --short)" -m "Release $(uv version --short)"
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
