@@ -22,7 +22,7 @@ format:
 	uvx pre-commit run --all-files
 
 lint:
-	uvx ruff check . --exclude "*.ipynb"
+	uvx ruff check .
 	uvx pre-commit install
 	uvx pre-commit run --all-files
 
