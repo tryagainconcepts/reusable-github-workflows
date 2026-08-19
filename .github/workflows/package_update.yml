@@ -88,3 +88,17 @@ jobs:
             automated
             automerge
         if: always()
+      # "Allow auto-merge" in repo settings only makes the feature available; it
+      # must still be enabled per PR, and nobody clicks the button on automated
+      # PRs. Enable it here so GitHub merges once required checks pass.
+      # (Needs a ruleset/branch protection with required status checks on the base
+      # branch; without one GitHub refuses to enable auto-merge.)
+      - name: Enable auto-merge
+        if: always() && steps.cpr.outputs.pull-request-operation == 'created'
+        env:
+          GH_TOKEN: ${{ secrets.checkout_token }}
+          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
+        run: |
+          if ! gh pr merge --auto --merge "$PR_URL"; then
+            echo "::warning::Could not enable auto-merge on $PR_URL (does the base branch require status checks?)"
+          fi
