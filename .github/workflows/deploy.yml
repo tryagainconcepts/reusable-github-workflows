@@ -215,7 +215,8 @@ jobs:
               where = e["REF_NAME"]
           summary = f"{title} · {e['REPO']} ({where})"
           text = (
-              f"<b>{html.escape(title)}</b> &nbsp; <a href=\"{repo_url}\">{h('REPO')}</a><br>"
+              # Icon only in the message body (the status text lives in the toast summary).
+              f"{html.escape(title.split(' ', 1)[0])} <b><a href=\"{repo_url}\">{h('REPO')}</a></b><br>"
               f"{what}<br>"
               f"<span style=\"color:#666\">{h('ACTOR')} · {h('EVENT_NAME')} · "
               f"<a href=\"{h('RUN_URL')}\">{h('WORKFLOW')} #{h('RUN_NUMBER')}</a></span>"
