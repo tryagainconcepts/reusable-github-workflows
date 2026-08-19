@@ -66,6 +66,8 @@ permissions:
 
 jobs:
   build-test-deploy:
+    # Job id/name kept for rulesets that require this status check; it now only
+    # builds and tests — merge and deploy live in the jobs below.
     name: Build Test and Deploy
     runs-on: "${{ inputs.runs-on }}"
     timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -157,12 +159,23 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
 
-      # Replaces pascalgn/automerge-action (unmaintained, node20). Same contract:
+  # Merge happens only after the whole build/test job above has finished green,
+  # in its own job; deploy then runs in a separate job (a merge done with
+  # GITHUB_TOKEN does not trigger a new run on main, so it must happen here).
+  automerge:
+    name: Automerge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build-test-deploy
+    if: github.ref != 'refs/heads/main'
+    outputs:
+      mergeResult: ${{ steps.automerge.outputs.mergeResult }}
+    steps:
+      # Same contract as the old in-job step (and pascalgn/automerge-action before it):
       # merge open PRs for this commit labelled "automerge" and not "work in progress",
-      # and expose mergeResult=merged|skipped|not_merged for the deploy steps below.
+      # and expose mergeResult=merged|skipped|not_merged.
       - name: automerge on PR labelled with automerge
         id: automerge
-        if: github.ref != 'refs/heads/main'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
@@ -174,7 +187,13 @@ jobs:
 
             let prs;
             if (context.payload.pull_request) {
-              prs = [context.payload.pull_request];
+              // Re-fetch rather than trusting the event payload: for a PR opened by
+              // create-pull-request the "opened" event fires before labels are added,
+              // so the payload snapshot has labels: [] even when "automerge" is set.
+              const { data: fresh } = await github.rest.pulls.get({
+                owner, repo, pull_number: context.payload.pull_request.number,
+              });
+              prs = [fresh];
             } else {
               ({ data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
                 owner, repo, commit_sha: context.sha,
@@ -211,23 +230,45 @@ jobs:
               }
             }
             core.setOutput("mergeResult", result);
-      - name: switch to main branch
-        if: steps.automerge.outputs.mergeResult == 'merged'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+  release:
+    name: Deploy
+    runs-on: "${{ inputs.runs-on }}"
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    needs: [build-test-deploy, automerge]
+    # Run on a push to main, or right after this run merged a PR into main.
+    # (!cancelled() because automerge is skipped on main and would otherwise skip us.)
+    if: >-
+      !cancelled() && needs.build-test-deploy.result == 'success' &&
+      (github.ref == 'refs/heads/main' || needs.automerge.outputs.mergeResult == 'merged')
+    env:
+      env_base64: ${{ secrets.env_base64 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           persist-credentials: false
-      - name: Debug deploy conditions
-        if: always()
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: ${{ inputs.python_version }}
+      - name: Setup ENV
         run: |
-          echo "github.ref                 = ${{ github.ref }}"
-          echo "endsWith(ref, '/main')     = ${{ endsWith(github.ref, '/main') }}"
-          echo "automerge mergeResult       = ${{ steps.automerge.outputs.mergeResult }}"
-          echo "inputs.deploy_script set?   = ${{ inputs.deploy_script != '' }}"
-          echo "inputs.pypi_release         = ${{ inputs.pypi_release }}"
-          echo "deploy step will run?       = ${{ inputs.deploy_script != '' && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged') }}"
+          echo "$env_base64" | base64 -d > .env
+          cut -d '=' -f 1 .env | sed '/^\s*$/d'
+          cat .env >> "$GITHUB_ENV"
+          source .env
+        if: ${{ env.env_base64 != '' }}
+      - name: install package
+        run: |
+          IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
+          export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
+          export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
+          make config-test
+        env:
+          REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: deploy
-        if: inputs.deploy_script && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged')
+        if: inputs.deploy_script
         run: |
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
           export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
@@ -240,7 +281,6 @@ jobs:
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: bumpversion
-        if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
         run: |
           git config --global user.email "bumpversion@example.com"
           git config --global user.name "versionbump"
@@ -258,19 +298,52 @@ jobs:
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       - name: Push new version tag
-        if: endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged'
         uses: ad-m/github-push-action@881a6320fdb16eb5318c5054f31c218aec2b324c # v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tags: true
       - name: Release pypi on main branch
-        if: inputs.pypi_release && (endsWith(github.ref, '/main') || steps.automerge.outputs.mergeResult == 'merged')
+        if: inputs.pypi_release
         run: |
           make release-s3
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.aws_key_id }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
+
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build-test-deploy, automerge, release]
+    if: always()
+    steps:
+      - name: Determine overall result
+        id: result
+        env:
+          BUILD: ${{ needs.build-test-deploy.result }}
+          MERGE: ${{ needs.automerge.result }}
+          RELEASE: ${{ needs.release.result }}
+        run: |
+          stage="CI"; [ "$RELEASE" != "skipped" ] && stage="Deploy"
+          status=success
+          for r in "$BUILD" "$MERGE" "$RELEASE"; do
+            case "$r" in
+              failure) status=failure ;;
+              cancelled) [ "$status" = success ] && status=cancelled ;;
+            esac
+          done
+          case "$status" in
+            success)   title="✅ $stage Succeeded" ;;
+            cancelled) title="🚫 $stage Cancelled" ;;
+            *)         title="❌ $stage Failed" ;;
+          esac
+          echo "build=$BUILD automerge=$MERGE release=$RELEASE -> $title"
+          { echo "status=$status"; echo "title=$title"; } >> "$GITHUB_OUTPUT"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: ${{ inputs.python_version }}
       - name: Compose Slack commit summary
         if: always()
         env:
@@ -293,13 +366,13 @@ jobs:
           webhook: ${{ secrets.slack_webhook_url }}
           webhook-type: incoming-webhook
           payload: |
-            text: "${{ job.status == 'success' && '✅' || job.status == 'cancelled' && '🚫' || '❌' }} Deploy ${{ job.status }} — ${{ github.repository }}@${{ github.ref_name }}"
+            text: "${{ steps.result.outputs.title }} — ${{ github.repository }}@${{ github.ref_name }}"
             blocks:
               - type: "header"
                 text:
                   type: "plain_text"
                   emoji: true
-                  text: "${{ job.status == 'success' && '✅ Deploy Succeeded' || job.status == 'cancelled' && '🚫 Deploy Cancelled' || '❌ Deploy Failed' }}"
+                  text: "${{ steps.result.outputs.title }}"
               - type: "section"
                 fields:
                   - type: "mrkdwn"
@@ -338,7 +411,7 @@ jobs:
         env:
           # Prefer the secret; fall back to a repository/org variable of the caller.
           TEAMS_CHANNEL_WEBHOOK_URL: ${{ secrets.teams_webhook_url || vars.TEAMS_CHANNEL_WEBHOOK_URL }}
-          STATUS: ${{ job.status }}
+          TITLE: ${{ steps.result.outputs.title }}
           REPO: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
@@ -370,10 +443,7 @@ jobs:
           # First line of the commit message, truncated (same rule as the Slack step).
           commit = e.get("RAW_COMMIT_MSG", "").splitlines()[0:1]
           commit = html.escape((commit[0] if commit else "").strip()[:160]) or "<i>(no commit message)</i>"
-          title = {
-              "success":   "✅ Deploy Succeeded",
-              "cancelled": "🚫 Deploy Cancelled",
-          }.get(e["STATUS"], "❌ Deploy Failed")
+          title = e["TITLE"]
           summary = f"{title} — {e['REPO']}@{e['REF_NAME']}"
           text = (
               f"<b>{html.escape(title)}</b><br>"
@@ -402,9 +472,9 @@ jobs:
     name: Changelog
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    if: endsWith(github.ref, '/main')
-    needs:
-      - build-test-deploy
+    # After release so the changelog commit doesn't race the version-bump push.
+    if: "!cancelled() && endsWith(github.ref, '/main') && needs.release.result == 'success'"
+    needs: [build-test-deploy, release]
     steps:
       # Check out the tip of main (includes the version-bump commit the
       # build-test-deploy job just pushed) so the changelog commit is a
