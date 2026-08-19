@@ -95,10 +95,23 @@ jobs:
       # branch; without one GitHub refuses to enable auto-merge.)
       - name: Enable auto-merge
         if: always() && steps.cpr.outputs.pull-request-operation == 'created'
-        env:
-          GH_TOKEN: ${{ secrets.checkout_token }}
-          PR_URL: ${{ steps.cpr.outputs.pull-request-url }}
-        run: |
-          if ! gh pr merge --auto --merge "$PR_URL"; then
-            echo "::warning::Could not enable auto-merge on $PR_URL (does the base branch require status checks?)"
-          fi
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          # Same PAT that opened the PR; GITHUB_TOKEN cannot enable auto-merge on it.
+          github-token: ${{ secrets.checkout_token }}
+          script: |
+            const number = Number("${{ steps.cpr.outputs.pull-request-number }}");
+            const { owner, repo } = context.repo;
+            const { repository } = await github.graphql(
+              `query($owner:String!,$repo:String!,$number:Int!){
+                 repository(owner:$owner,name:$repo){ pullRequest(number:$number){ id } } }`,
+              { owner, repo, number });
+            try {
+              await github.graphql(
+                `mutation($id:ID!){ enablePullRequestAutoMerge(input:{pullRequestId:$id, mergeMethod:MERGE}){ clientMutationId } }`,
+                { id: repository.pullRequest.id });
+              core.info(`Auto-merge enabled on PR #${number}`);
+            } catch (err) {
+              core.warning(`Could not enable auto-merge on PR #${number}: ${err.message} ` +
+                `(is "Allow auto-merge" on and does the base branch require status checks?)`);
+            }
