@@ -348,6 +348,9 @@ jobs:
             echo "No Teams webhook configured (secret teams_webhook_url / var TEAMS_CHANNEL_WEBHOOK_URL); skipping."
             exit 0
           fi
+          # The URL may come from a plain variable (not auto-masked); anyone with
+          # it can post to the channel, so keep it out of the logs.
+          echo "::add-mask::$TEAMS_WEBHOOK_URL"
           case "$STATUS" in
             success)   TITLE="✅ Deploy Succeeded"; COLOR="good" ;;
             cancelled) TITLE="🚫 Deploy Cancelled"; COLOR="warning" ;;
