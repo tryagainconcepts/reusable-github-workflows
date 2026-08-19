@@ -11,6 +11,11 @@ on:
         type: string
         required: false
         default: self-hosted
+      timeout-minutes:
+        description: "Timeout (minutes) for the package-update job"
+        type: number
+        required: false
+        default: 10
     secrets:
       pipy_registry_auth:
         required: false
@@ -29,7 +34,7 @@ jobs:
   package-update:
     # The type of runner that the job will run on
     runs-on: "${{ inputs.runs-on }}"
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       env_base64: ${{ secrets.env_base64 }}
     # Steps represent a sequence of tasks that will be executed as part of the job

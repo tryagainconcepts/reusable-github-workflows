@@ -30,7 +30,7 @@ on:
         required: false
         default: self-hosted
       timeout-minutes:
-        description: "Timeout for the Build Test and Deploy job"
+        description: "Timeout (minutes) applied to each job in this workflow"
         type: number
         required: false
         default: 20
@@ -404,7 +404,7 @@ jobs:
   changelog:
     name: Changelog
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     if: endsWith(github.ref, '/main')
     needs:
       - build-test-deploy
