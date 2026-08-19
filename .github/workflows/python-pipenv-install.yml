@@ -29,6 +29,11 @@ on:
         type: string
         required: false
         default: self-hosted
+      timeout-minutes:
+        description: "Timeout for the Build Test and Deploy job"
+        type: number
+        required: false
+        default: 20
       audit_ignore_packages:
         description: >-
           Space-separated package names to exclude from the vulnerability audit
@@ -63,7 +68,7 @@ jobs:
   build-test-deploy:
     name: Build Test and Deploy
     runs-on: "${{ inputs.runs-on }}"
-    timeout-minutes: 20
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       env_base64: ${{ secrets.env_base64 }}
     steps:
