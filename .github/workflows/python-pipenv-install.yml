@@ -387,7 +387,12 @@ jobs:
                   {"type": "Action.OpenUrl", "title": "📜 View Run", "url": e["RUN_URL"]},
               ],
           }
-          print(json.dumps({"type": "message", "attachments": [{
+          # Plain-text summary: Teams uses it for the notification toast / chat
+          # preview ("Message has no preview" otherwise). Same line Slack shows.
+          summary = f"{title} — {e['REPO']}@{e['REF_NAME']}"
+          card["speak"] = summary
+          card["fallbackText"] = summary
+          print(json.dumps({"type": "message", "summary": summary, "attachments": [{
               "contentType": "application/vnd.microsoft.card.adaptive",
               "contentUrl": None, "content": card}]}))
           PY
