@@ -332,7 +332,7 @@ jobs:
         if: always()
         env:
           # Prefer the secret; fall back to a repository/org variable of the caller.
-          TEAMS_WEBHOOK_URL: ${{ secrets.teams_webhook_url || vars.TEAMS_CHANNEL_WEBHOOK_URL }}
+          TEAMS_CHANNEL_WEBHOOK_URL: ${{ secrets.teams_webhook_url || vars.TEAMS_CHANNEL_WEBHOOK_URL }}
           STATUS: ${{ job.status }}
           REPO: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
@@ -344,57 +344,51 @@ jobs:
           COMMIT_URL: ${{ github.event.head_commit.url || format('https://github.com/{0}/commit/{1}', github.repository, github.sha) }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if [ -z "$TEAMS_WEBHOOK_URL" ]; then
+          if [ -z "$TEAMS_CHANNEL_WEBHOOK_URL" ]; then
             echo "No Teams webhook configured (secret teams_webhook_url / var TEAMS_CHANNEL_WEBHOOK_URL); skipping."
             exit 0
           fi
           # The URL may come from a plain variable (not auto-masked); anyone with
           # it can post to the channel, so keep it out of the logs.
-          echo "::add-mask::$TEAMS_WEBHOOK_URL"
-          case "$STATUS" in
-            success)   TITLE="✅ Deploy Succeeded"; COLOR="good" ;;
-            cancelled) TITLE="🚫 Deploy Cancelled"; COLOR="warning" ;;
-            *)         TITLE="❌ Deploy Failed";    COLOR="attention" ;;
-          esac
-          # Same content as the Slack message, as an Adaptive Card. All values are
-          # passed via --arg so commit messages etc. cannot break the JSON.
-          PAYLOAD=$(jq -n \
-            --arg title "$TITLE" --arg color "$COLOR" \
-            --arg repo "$REPO" --arg ref "$REF_NAME" --arg actor "$ACTOR" \
-            --arg event "$EVENT_NAME" --arg commit "$COMMIT_MSG" \
-            --arg workflow "$WORKFLOW" --arg run "$RUN_NUMBER" --arg sha "$SHA" \
-            --arg commit_url "$COMMIT_URL" --arg run_url "$RUN_URL" \
-            '{
-              type: "message",
-              attachments: [{
-                contentType: "application/vnd.microsoft.card.adaptive",
-                contentUrl: null,
-                content: {
-                  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                  type: "AdaptiveCard", version: "1.4",
-                  msteams: { width: "Full" },
-                  body: [
-                    { type: "TextBlock", size: "Large", weight: "Bolder", color: $color, text: $title },
-                    { type: "FactSet", facts: [
-                      { title: "Repository", value: ("[" + $repo + "](https://github.com/" + $repo + ")") },
-                      { title: "Branch",     value: $ref },
-                      { title: "Author",     value: $actor },
-                      { title: "Event",      value: $event },
-                      { title: "Commit",     value: $commit }
-                    ]},
-                    { type: "TextBlock", isSubtle: true, wrap: true, spacing: "Medium",
-                      text: ("Workflow **" + $workflow + "**  ·  Run #" + $run + "  ·  `" + $sha + "`") }
-                  ],
-                  actions: [
-                    { type: "Action.OpenUrl", title: "🔗 View Commit", url: $commit_url },
-                    { type: "Action.OpenUrl", title: "📜 View Run",    url: $run_url }
-                  ]
-                }
-              }]
-            }')
+          echo "::add-mask::$TEAMS_CHANNEL_WEBHOOK_URL"
+          # Same content as the Slack message, as an Adaptive Card. Built with
+          # Python's json module (jq isn't guaranteed on self-hosted runners), so
+          # commit messages etc. cannot break the JSON.
+          uv run --no-project python - > "$RUNNER_TEMP/teams-payload.json" <<'PY'
+          import json, os
+          e = os.environ
+          title, color = {
+              "success":   ("✅ Deploy Succeeded", "good"),
+              "cancelled": ("🚫 Deploy Cancelled", "warning"),
+          }.get(e["STATUS"], ("❌ Deploy Failed", "attention"))
+          card = {
+              "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+              "type": "AdaptiveCard", "version": "1.4",
+              "msteams": {"width": "Full"},
+              "body": [
+                  {"type": "TextBlock", "size": "Large", "weight": "Bolder", "color": color, "text": title},
+                  {"type": "FactSet", "facts": [
+                      {"title": "Repository", "value": f"[{e['REPO']}](https://github.com/{e['REPO']})"},
+                      {"title": "Branch", "value": e["REF_NAME"]},
+                      {"title": "Author", "value": e["ACTOR"]},
+                      {"title": "Event", "value": e["EVENT_NAME"]},
+                      {"title": "Commit", "value": e.get("COMMIT_MSG", "")},
+                  ]},
+                  {"type": "TextBlock", "isSubtle": True, "wrap": True, "spacing": "Medium",
+                   "text": f"Workflow **{e['WORKFLOW']}**  ·  Run #{e['RUN_NUMBER']}  ·  `{e['SHA']}`"},
+              ],
+              "actions": [
+                  {"type": "Action.OpenUrl", "title": "🔗 View Commit", "url": e["COMMIT_URL"]},
+                  {"type": "Action.OpenUrl", "title": "📜 View Run", "url": e["RUN_URL"]},
+              ],
+          }
+          print(json.dumps({"type": "message", "attachments": [{
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "contentUrl": None, "content": card}]}))
+          PY
           curl --fail-with-body --silent --show-error -X POST \
             -H "Content-Type: application/json" \
-            --data "$PAYLOAD" "$TEAMS_WEBHOOK_URL"
+            --data @"$RUNNER_TEMP/teams-payload.json" "$TEAMS_CHANNEL_WEBHOOK_URL"
   changelog:
     name: Changelog
     runs-on: ubuntu-latest
