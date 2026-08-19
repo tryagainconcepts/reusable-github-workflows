@@ -29,6 +29,14 @@ on:
         type: string
         required: false
         default: self-hosted
+      audit_ignore_packages:
+        description: >-
+          Space-separated package names to exclude from the vulnerability audit
+          (e.g. "setuptools"). Use only for a hard-pinned dependency that cannot be
+          upgraded; every advisory for that package is silenced, so keep the list short.
+        required: false
+        default: ""
+        type: string
     secrets:
       pipy_registry_auth:
         required: false
@@ -110,7 +118,17 @@ jobs:
         run: |
           uv export --frozen --all-extras --no-hashes --no-emit-project --quiet \
             -o "$RUNNER_TEMP/requirements.txt"
+          for pkg in $AUDIT_IGNORE_PACKAGES; do
+            echo "::warning::Excluding '$pkg' from vulnerability audit (audit_ignore_packages)"
+            # Match "name==", "name[extra]==", "name ==" etc.; package names are case-insensitive
+            # and '-'/'_' are interchangeable, so normalise both sides.
+            pattern="^$(printf '%s' "$pkg" | sed 's/[-_]/[-_]/g')([[:space:]]|\[|==|$)"
+            grep -viE "$pattern" "$RUNNER_TEMP/requirements.txt" > "$RUNNER_TEMP/requirements.filtered" || true
+            mv "$RUNNER_TEMP/requirements.filtered" "$RUNNER_TEMP/requirements.txt"
+          done
           uvx pip-audit -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+        env:
+          AUDIT_IGNORE_PACKAGES: ${{ inputs.audit_ignore_packages }}
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@315db7fe45ac2880b7758f1933e6e5d59afd5e94 # 1.12.1
         if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
