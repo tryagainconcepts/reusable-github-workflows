@@ -220,6 +220,13 @@ jobs:
               "contentType": "application/vnd.microsoft.card.adaptive",
               "contentUrl": None, "content": card}]}))
           PY
-          curl --fail-with-body --silent --show-error -X POST \
-            -H "Content-Type: application/json" \
-            --data @"$RUNNER_TEMP/teams-payload.json" "$TEAMS_CHANNEL_WEBHOOK_URL"
+          # (--fail-with-body needs curl >= 7.76, which older runners lack; check status manually.)
+          HTTP_CODE=$(curl --silent --show-error -o "$RUNNER_TEMP/teams-response.txt" -w '%{http_code}' \
+            -X POST -H "Content-Type: application/json" \
+            --data @"$RUNNER_TEMP/teams-payload.json" "$TEAMS_CHANNEL_WEBHOOK_URL")
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Teams webhook returned HTTP $HTTP_CODE"
+            cat "$RUNNER_TEMP/teams-response.txt"; echo
+            exit 1
+          fi
+          echo "Teams notification sent (HTTP $HTTP_CODE)"
