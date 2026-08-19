@@ -19,6 +19,10 @@ help:
 
 format:
 	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
+	# pre-commit exits 1 whenever a hook modifies files, which for a *format*
+	# target is the expected outcome. First pass applies fixes (exit ignored),
+	# second pass must be clean: it only fails on issues hooks cannot auto-fix.
+	-uvx pre-commit run --all-files
 	uvx pre-commit run --all-files
 
 lint:
