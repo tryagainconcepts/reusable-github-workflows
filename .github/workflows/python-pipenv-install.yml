@@ -422,6 +422,11 @@ jobs:
           COMMIT_URL: ${{ github.event.head_commit.url || format('https://github.com/{0}/commit/{1}', github.repository, github.sha) }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           RAW_COMMIT_MSG: ${{ github.event.head_commit.message }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           if [ -z "$TEAMS_CHANNEL_WEBHOOK_URL" ]; then
             echo "No Teams webhook configured (secret teams_webhook_url / var TEAMS_CHANNEL_WEBHOOK_URL); skipping."
@@ -440,21 +445,24 @@ jobs:
           import html, json, os
           e = os.environ
           h = lambda k: html.escape(e.get(k, ""))
-          # First line of the commit message, truncated (same rule as the Slack step).
-          commit = e.get("RAW_COMMIT_MSG", "").splitlines()[0:1]
-          commit = html.escape((commit[0] if commit else "").strip()[:160]) or "<i>(no commit message)</i>"
           title = e["TITLE"]
-          summary = f"{title} — {e['REPO']}@{e['REF_NAME']}"
+          repo_url = f"https://github.com/{h('REPO')}"
+          short_sha = h("SHA")[:7]
+          if e.get("PR_NUMBER"):
+              what = (f"<a href=\"{h('PR_URL')}\">PR #{h('PR_NUMBER')}</a> {h('PR_TITLE')}"
+                      f"<br><span style=\"color:#666\">{h('HEAD_REF')} → {h('BASE_REF')}</span>")
+              where = f"PR #{e['PR_NUMBER']}"
+          else:
+              commit = e.get("RAW_COMMIT_MSG", "").splitlines()[0:1]
+              commit = html.escape((commit[0] if commit else "").strip()[:160]) or "(no commit message)"
+              what = f"<a href=\"{h('COMMIT_URL')}\">{short_sha}</a> {commit}"
+              where = e["REF_NAME"]
+          summary = f"{title} · {e['REPO']} ({where})"
           text = (
-              f"<b>{html.escape(title)}</b><br>"
-              f"<b>Repository:</b> <a href=\"https://github.com/{h('REPO')}\">{h('REPO')}</a>"
-              f" &nbsp;·&nbsp; <b>Branch:</b> <code>{h('REF_NAME')}</code>"
-              f" &nbsp;·&nbsp; <b>Author:</b> {h('ACTOR')}"
-              f" &nbsp;·&nbsp; <b>Event:</b> <code>{h('EVENT_NAME')}</code><br>"
-              f"<b>Commit:</b> {commit}<br>"
-              f"<small>Workflow <b>{h('WORKFLOW')}</b> · Run #{h('RUN_NUMBER')} · <code>{h('SHA')}</code></small><br>"
-              f"🔗 <a href=\"{h('COMMIT_URL')}\">View Commit</a> &nbsp;·&nbsp; "
-              f"📜 <a href=\"{h('RUN_URL')}\">View Run</a>"
+              f"<b>{html.escape(title)}</b> &nbsp; <a href=\"{repo_url}\">{h('REPO')}</a><br>"
+              f"{what}<br>"
+              f"<span style=\"color:#666\">{h('ACTOR')} · {h('EVENT_NAME')} · "
+              f"<a href=\"{h('RUN_URL')}\">{h('WORKFLOW')} #{h('RUN_NUMBER')}</a></span>"
           )
           print(json.dumps({"type": "message", "summary": summary, "text": text}))
           PY
