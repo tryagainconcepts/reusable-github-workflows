@@ -22,7 +22,7 @@ format: ## Format and apply configured pre-commit fixes.
 	echo "pre-commit still reports issues after 5 passes"; exit 1
 
 lint: ## Run Ruff and all configured pre-commit checks.
-	uvx ruff check . --exclude "*.ipynb"
+	uvx ruff check .
 	uvx pre-commit run --all-files
 
 test: lint ## Run the test suite in the locked environment.
