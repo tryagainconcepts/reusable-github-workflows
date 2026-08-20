@@ -8,6 +8,9 @@ on:
         required: false
         type: string
       runs-on:
+        description: >-
+          Runner label, or a JSON array of labels that must all match
+          (e.g. '["self-hosted", "Linux"]').
         type: string
         required: false
         default: self-hosted
@@ -33,7 +36,8 @@ jobs:
   # This workflow contains a single job called "build"
   package-update:
     # The type of runner that the job will run on
-    runs-on: "${{ inputs.runs-on }}"
+    # Single label ("self-hosted") or a JSON array of labels ('["self-hosted", "Linux"]').
+    runs-on: ${{ contains(inputs.runs-on, '[') && fromJSON(inputs.runs-on) || inputs.runs-on }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       env_base64: ${{ secrets.env_base64 }}

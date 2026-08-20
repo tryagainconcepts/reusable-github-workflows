@@ -26,6 +26,9 @@ on:
         default: "ap-southeast-1"
         type: string
       runs-on:
+        description: >-
+          Runner label, or a JSON array of labels that must all match
+          (e.g. '["self-hosted", "Linux"]').
         type: string
         required: false
         default: self-hosted
@@ -69,7 +72,8 @@ jobs:
     # Job id/name kept for rulesets that require this status check; it now only
     # builds and tests — merge and deploy live in the jobs below.
     name: Build Test and Deploy
-    runs-on: "${{ inputs.runs-on }}"
+    # Single label ("self-hosted") or a JSON array of labels ('["self-hosted", "Linux"]').
+    runs-on: ${{ contains(inputs.runs-on, '[') && fromJSON(inputs.runs-on) || inputs.runs-on }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       env_base64: ${{ secrets.env_base64 }}
@@ -141,7 +145,7 @@ jobs:
           AUDIT_IGNORE_PACKAGES: ${{ inputs.audit_ignore_packages }}
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@315db7fe45ac2880b7758f1933e6e5d59afd5e94 # 1.12.1
-        if: inputs.setup_mongo && inputs.runs-on != 'self-hosted'
+        if: inputs.setup_mongo && !contains(inputs.runs-on, 'self-hosted')
       - name: Setup ENV
         run: |
           echo "$env_base64" | base64 -d > .env
@@ -233,7 +237,8 @@ jobs:
 
   release:
     name: Deploy
-    runs-on: "${{ inputs.runs-on }}"
+    # Single label ("self-hosted") or a JSON array of labels ('["self-hosted", "Linux"]').
+    runs-on: ${{ contains(inputs.runs-on, '[') && fromJSON(inputs.runs-on) || inputs.runs-on }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     needs: [build-test-deploy, automerge]
     # Run on a push to main, or right after this run merged a PR into main.
