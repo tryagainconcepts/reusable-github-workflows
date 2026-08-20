@@ -1,24 +1,15 @@
 # common make file
-# add include common.mk to your Makefile
+# add `include common.mk` to your Makefile
 
-.PHONY: clean-pyc clean-build docs
-help:
-	@echo "clean-build - remove build artifacts"
-	@echo "clean-pyc - remove Python file artifacts"
-	@echo "config - install package and production dependencies"
-	@echo "config-test - install package and test dependencies"
-	@echo "config-develop - install package and development dependencies"
-	@echo "coverage - run coverage test"
-	@echo "format - format code with black"
-	@echo "lint - check style with pylint"
-	@echo "test - run tests"
-	@echo "docs - generate Sphinx HTML documentation, including API docs"
-	@echo "release - package and upload a release"
-	@echo "sdist - package"
+.DEFAULT_GOAL := help
 
+.PHONY: help format lint test clean clean-build clean-pyc config config-test config-develop release-s3 upgrade-packages
 
-format:
-	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
+help: ## Show available targets.
+	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-24s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+format: ## Format and apply configured pre-commit fixes.
+	@test -f .pre-commit-config.yaml || curl -sSfO https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
 	# pre-commit runs hooks in order, once each, and exits 1 whenever a hook
 	# modifies a file. A fix from a later hook (ruff-check/ruff-format) can create
 	# work for an earlier one (trailing-whitespace, end-of-file-fixer), so a
@@ -30,44 +21,44 @@ format:
 	done; \
 	echo "pre-commit still reports issues after 5 passes"; exit 1
 
-lint:
-	uvx ruff check .
-	uvx pre-commit install
+lint: ## Run Ruff and all configured pre-commit checks.
+	uvx ruff check . --exclude "*.ipynb"
 	uvx pre-commit run --all-files
 
-test: lint ## run tests quickly with the default Python
-	uv run python -m pytest -v -l tests
+test: lint ## Run the test suite in the locked environment.
+	uv run --no-sync python -m pytest -v -l tests
 
-clean: clean-build clean-pyc
+clean: clean-build clean-pyc ## Remove generated build and Python artifacts.
 
-clean-build:
-	rm -fr build/
-	rm -fr dist/
-	rm -fr *.egg-info
+clean-build: ## Remove package build artifacts.
+	rm -rf build dist
+	find . -name '*.egg-info' -not -path './.venv/*' -exec rm -rf {} +
 
-clean-pyc:
-	find . -name '*.pyc' -exec rm -f {} +
-	find . -name '*.pyo' -exec rm -f {} +
-	find . -name '*~' -exec rm -f {} +
+clean-pyc: ## Remove Python bytecode and backup files.
+	find . -name '*.pyc' -delete
+	find . -name '*.pyo' -delete
+	find . -name '*~' -delete
 
-config-test:
-	uv sync --all-extras
+config: ## Install locked production dependencies.
+	uv sync --frozen --no-dev
 
-config-develop:
-	uv sync --all-extras
-	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
-	curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/common.mk
+config-test: ## Install locked dependencies with all extras.
+	uv sync --frozen --all-extras
+
+config-develop: config-test ## Install development tools, hooks, and the latest shared config.
+	curl -sSfO https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
+	curl -sSfO https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/common.mk
 	uvx pre-commit install
-	uvx pre-commit run --all-files
 
-config:
-	uv sync
-
-release-s3: clean
+release-s3: clean ## Build and upload the package to the private S3 index.
 	uv build
-	uvx s3pypi --verbose upload dist/* --bucket pipy.detalytics.com --put-root-index
+	uvx --from s3pypi s3pypi --verbose upload dist/* --bucket pipy.detalytics.com --put-root-index
 
-upgrade-packages:
+upgrade-packages: ## Upgrade the lockfile and publish the automation branch.
 	uv lock --upgrade
-	git commit -a -m 'automated package update'
-	git push origin automated-package-update
+	@if git diff --quiet uv.lock; then \
+		echo "lockfile unchanged; nothing to push"; \
+	else \
+		git commit -m 'automated package update' uv.lock && \
+		git push -f origin HEAD:automated-package-update; \
+	fi
