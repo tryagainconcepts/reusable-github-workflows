@@ -205,7 +205,10 @@ jobs:
           import html, json, os
           e = os.environ
           h = lambda k: html.escape(e.get(k, ""))
-          title = e["TITLE"]
+          title = {
+              "success":   "✅ Deploy Succeeded",
+              "cancelled": "🚫 Deploy Cancelled",
+          }.get(e["STATUS"], "❌ Deploy Failed")
           repo_url = f"https://github.com/{h('REPO')}"
           short_sha = h("SHA")[:7]
           if e.get("PR_NUMBER"):
