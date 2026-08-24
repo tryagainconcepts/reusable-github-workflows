@@ -72,6 +72,11 @@ jobs:
     # Job id/name kept for rulesets that require this status check; it now only
     # builds and tests — merge and deploy live in the jobs below.
     name: Build Test and Deploy
+    # A newer push to the same ref supersedes this build; cancel the older run
+    # instead of paying for both. Runs on main are never cancelled.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-build-test
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
     # Single label ("self-hosted") or a JSON array of labels ('["self-hosted", "Linux"]').
     runs-on: ${{ contains(inputs.runs-on, '[') && fromJSON(inputs.runs-on) || inputs.runs-on }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
@@ -105,6 +110,20 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: ${{ inputs.python_version }}
+          # Wheel cache keyed on uv.lock; hosted runners only -- self-hosted
+          # machines already keep a warm local uv cache, and round-tripping it
+          # through the Actions cache would only add transfer time.
+          enable-cache: ${{ runner.environment != 'self-hosted' }}
+      # Hosted runners start cold; rebuilding every pre-commit hook
+      # environment takes minutes. Self-hosted machines keep a warm local
+      # cache already.
+      - name: Cache pre-commit hook environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+        if: runner.environment != 'self-hosted'
+
       - name: Pull pre-commit config
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
@@ -257,6 +276,10 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: ${{ inputs.python_version }}
+          # Wheel cache keyed on uv.lock; hosted runners only -- self-hosted
+          # machines already keep a warm local uv cache, and round-tripping it
+          # through the Actions cache would only add transfer time.
+          enable-cache: ${{ runner.environment != 'self-hosted' }}
       - name: Setup ENV
         run: |
           echo "$env_base64" | base64 -d > .env
@@ -349,6 +372,10 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: ${{ inputs.python_version }}
+          # Wheel cache keyed on uv.lock; hosted runners only -- self-hosted
+          # machines already keep a warm local uv cache, and round-tripping it
+          # through the Actions cache would only add transfer time.
+          enable-cache: ${{ runner.environment != 'self-hosted' }}
       - name: Compose Slack commit summary
         if: always()
         env:

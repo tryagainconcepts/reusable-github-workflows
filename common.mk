@@ -21,8 +21,13 @@ format: ## Format and apply configured pre-commit fixes.
 	done; \
 	echo "pre-commit still reports issues after 5 passes"; exit 1
 
+# Keep the ruff pin in sync with the ruff-pre-commit rev in
+# .pre-commit-config.yaml; an unpinned uvx ruff resolves to whatever is
+# latest at install time, so local and CI results drift apart.
+RUFF_VERSION := 0.16.3
+
 lint: ## Run Ruff and all configured pre-commit checks.
-	uvx ruff check .
+	uvx ruff@$(RUFF_VERSION) check .
 	uvx pre-commit run --all-files
 
 test: lint ## Run the test suite in the locked environment.
