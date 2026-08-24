@@ -61,6 +61,10 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: ${{ inputs.python_version }}
+          # Wheel cache keyed on uv.lock; hosted runners only -- self-hosted
+          # machines already keep a warm local uv cache, and round-tripping it
+          # through the Actions cache would only add transfer time.
+          enable-cache: ${{ runner.environment != 'self-hosted' }}
       - name: Pull pre-commit config
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml

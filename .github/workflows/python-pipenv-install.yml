@@ -46,6 +46,13 @@ on:
         default: ""
         type: string
     secrets:
+      runner_admin_token:
+        description: >-
+          Token with the org "Self-hosted runners: read" permission. When set,
+          the build job runs on the preferred (self-hosted) runner only if one
+          is idle, falling back to ubuntu-latest instead of queueing. When
+          absent, runs-on is used as-is.
+        required: false
       pipy_registry_auth:
         required: false
       slack_webhook_url:
@@ -68,12 +75,55 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Prefer the self-hosted runner but never block on it: with a
+  # runner_admin_token, route to the preferred runner only when an idle
+  # self-hosted runner exists, else fall back to ubuntu-latest. Without the
+  # token (or when the preferred runner is not self-hosted, or the API
+  # fails), keep the caller's runs-on unchanged.
+  pick-runner:
+    name: Pick runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      runs-on: ${{ steps.pick.outputs.runs-on }}
+    steps:
+      - id: pick
+        env:
+          RUNNER_ADMIN_TOKEN: ${{ secrets.runner_admin_token }}
+          PREFERRED: ${{ inputs.runs-on }}
+        run: |
+          case "$PREFERRED" in
+            \[*) preferred_json="$PREFERRED" ;;
+            *) preferred_json="[\"$PREFERRED\"]" ;;
+          esac
+          echo "preferred runner: $preferred_json"
+          if [ -z "$RUNNER_ADMIN_TOKEN" ] || ! echo "$preferred_json" | grep -q "self-hosted"; then
+            echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          resp=$(curl -sf -H "Authorization: Bearer $RUNNER_ADMIN_TOKEN" \
+            "https://api.github.com/orgs/${{ github.repository_owner }}/actions/runners?per_page=100") \
+            || { echo "::warning::runner API check failed, keeping preferred runner"; echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"; exit 0; }
+          echo "registered self-hosted runners:"
+          echo "$resp" | jq -r '.runners[] | "  \(.name)\t[\([.labels[].name] | join(","))]\tstatus=\(.status)\tbusy=\(.busy)"'
+          idle=$(echo "$resp" | jq '[.runners[] | select(.status == "online" and .busy == false)] | length')
+          echo "idle self-hosted runners: ${idle:-0}"
+          if [ "${idle:-0}" -ge 1 ]; then
+            echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"
+          else
+            echo 'runs-on=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+
   build-test-deploy:
     # Job id/name kept for rulesets that require this status check; it now only
     # builds and tests — merge and deploy live in the jobs below.
     name: Build Test and Deploy
-    # Single label ("self-hosted") or a JSON array of labels ('["self-hosted", "Linux"]').
-    runs-on: ${{ contains(inputs.runs-on, '[') && fromJSON(inputs.runs-on) || inputs.runs-on }}
+    # A newer push to the same ref supersedes this build; cancel the older run
+    # instead of paying for both. Runs on main are never cancelled.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-build-test
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    needs: pick-runner
+    runs-on: ${{ fromJSON(needs.pick-runner.outputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       env_base64: ${{ secrets.env_base64 }}
@@ -105,6 +155,20 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: ${{ inputs.python_version }}
+          # Wheel cache keyed on uv.lock; hosted runners only -- self-hosted
+          # machines already keep a warm local uv cache, and round-tripping it
+          # through the Actions cache would only add transfer time.
+          enable-cache: ${{ runner.environment != 'self-hosted' }}
+      # Hosted runners start cold; rebuilding every pre-commit hook
+      # environment takes minutes. Self-hosted machines keep a warm local
+      # cache already.
+      - name: Cache pre-commit hook environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+        if: runner.environment != 'self-hosted'
+
       - name: Pull pre-commit config
         run: |
           curl -O https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.pre-commit-config.yaml
@@ -257,6 +321,10 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: ${{ inputs.python_version }}
+          # Wheel cache keyed on uv.lock; hosted runners only -- self-hosted
+          # machines already keep a warm local uv cache, and round-tripping it
+          # through the Actions cache would only add transfer time.
+          enable-cache: ${{ runner.environment != 'self-hosted' }}
       - name: Setup ENV
         run: |
           echo "$env_base64" | base64 -d > .env
@@ -349,6 +417,10 @@ jobs:
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: ${{ inputs.python_version }}
+          # Wheel cache keyed on uv.lock; hosted runners only -- self-hosted
+          # machines already keep a warm local uv cache, and round-tripping it
+          # through the Actions cache would only add transfer time.
+          enable-cache: ${{ runner.environment != 'self-hosted' }}
       - name: Compose Slack commit summary
         if: always()
         env:
