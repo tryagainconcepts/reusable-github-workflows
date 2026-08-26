@@ -78,6 +78,33 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Enforce Conventional Commits on PR titles: with squash merges the PR
+  # title becomes the commit message release-please reads, so malformed
+  # titles would silently drop changes from CHANGELOG.md and version bumps.
+  lint-pr-title:
+    name: PR Title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            deps
+            test
+            ci
+            chore
+            docs
+            refactor
+            revert
+
   # Prefer the self-hosted runner but never block on it: with a
   # runner_admin_token, route to the preferred runner only when an idle
   # self-hosted runner exists, else fall back to ubuntu-latest. Without the
@@ -319,12 +346,12 @@ jobs:
 
   release:
     name: Deploy
-    # Caller's explicit runs-on (single label or JSON array of labels), or
-    # self-hosted when unset. Deploys intentionally queue rather than falling
-    # back to a hosted runner.
-    runs-on: ${{ inputs.runs-on == '' && 'self-hosted' || contains(inputs.runs-on, '[') && fromJSON(inputs.runs-on) || inputs.runs-on }}
+    # Same runner selection as build-test-deploy: pick-runner's choice
+    # (caller's explicit runs-on respected as-is; otherwise self-hosted with
+    # fallback to ubuntu-latest when none is idle).
+    runs-on: ${{ fromJSON(needs.pick-runner.outputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    needs: [build-test-deploy, automerge]
+    needs: [pick-runner, build-test-deploy, automerge]
     # Run on a push to main, or right after this run merged a PR into main.
     # (!cancelled() because automerge is skipped on main and would otherwise skip us.)
     if: >-
@@ -373,28 +400,9 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
-      - name: bumpversion
-        run: |
-          git config --global user.email "bumpversion@example.com"
-          git config --global user.name "versionbump"
-          IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
-          export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
-          export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
-          uv version --bump minor
-          git add pyproject.toml uv.lock
-          git commit -m "Bump version to $(uv version --short)"
-          # Self-hosted runners reuse the workspace; a tag left over from a run whose
-          # push was rejected would otherwise make `git tag` fail. The push below is
-          # non-forced, so a tag that really exists on the remote is still rejected there.
-          git tag -d "$(uv version --short)" 2>/dev/null || true
-          git tag -a "$(uv version --short)" -m "Release $(uv version --short)"
-        env:
-          REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
-      - name: Push new version tag
-        uses: ad-m/github-push-action@881a6320fdb16eb5318c5054f31c218aec2b324c # v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tags: true
+      # Version bumps, tags, CHANGELOG.md, and GitHub releases are handled by
+      # the release-please job below (merge its release PR to cut a release);
+      # the per-deploy `uv version --bump minor` + tag push used to live here.
       - name: Release pypi on main branch
         if: inputs.pypi_release
         run: |
@@ -574,50 +582,22 @@ jobs:
             exit 1
           fi
           echo "Teams notification sent (HTTP $HTTP_CODE)"
-  changelog:
-    name: Changelog
+  release-please:
+    name: Release Please
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.timeout-minutes }}
-    # After release so the changelog commit doesn't race the version-bump push.
+    timeout-minutes: 10
+    # Runs on main after a successful deploy. Maintains a running "release PR"
+    # that accumulates Conventional Commits (enforced by lint-pr-title);
+    # merging that PR bumps pyproject.toml, updates CHANGELOG.md, tags the
+    # release, and publishes a GitHub release.
     if: "!cancelled() && endsWith(github.ref, '/main') && needs.release.result == 'success'"
     needs: [build-test-deploy, release]
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
-      # Check out the tip of main (includes the version-bump commit the
-      # build-test-deploy job just pushed) so the changelog commit is a
-      # fast-forward and not a divergent push. fetch-depth: 0 gives the
-      # changelog builder full tag history.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         with:
-          ref: main
-          fetch-depth: 0
-      - name: View context attributes
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        with:
-          script: console.log(context)
-      - name: Build Changelog
-        id: build_changelog
-        uses: mikepenz/release-changelog-builder-action@c9bcd8238b6f41e05561348339429d360b1c0247 # v6.2.3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Update CHANGELOG.md
-        env:
-          CHANGELOG_CONTENT: ${{ steps.build_changelog.outputs.changelog }}
-        run: |
-          if [ -f CHANGELOG.md ]; then
-            cp CHANGELOG.md CHANGELOG.previous.md
-          fi
-
-          {
-            printf '## %s\n\n' "$(date -u +'%Y-%m-%d')"
-            printf '%s\n\n' "$CHANGELOG_CONTENT"
-            if [ -f CHANGELOG.previous.md ]; then
-              cat CHANGELOG.previous.md
-            fi
-          } > CHANGELOG.md
-
-          rm -f CHANGELOG.previous.md
-      - name: Commit Changelog
-        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
-        with:
-          commit_message: "chore: update changelog [skip ci]"
-          file_pattern: CHANGELOG.md
+          # caller repos may provide release-please-config.json +
+          # .release-please-manifest.json to override this config-less default
+          release-type: python
