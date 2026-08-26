@@ -17,10 +17,13 @@ on:
       runs-on:
         description: >-
           Runner label, or a JSON array of labels that must all match
-          (e.g. '["self-hosted", "Linux"]').
+          (e.g. '["self-hosted", "Linux"]'). When set, it is respected as-is
+          (no fallback). When empty (the default), the workflow prefers a
+          self-hosted runner and, with a runner_admin_token, falls back to
+          ubuntu-latest when none is idle.
         type: string
         required: false
-        default: self-hosted
+        default: ""
       timeout-minutes:
         type: number
         required: false
@@ -72,11 +75,16 @@ jobs:
           PREFERRED: ${{ inputs.runs-on }}
         run: |
           case "$PREFERRED" in
+            "") preferred_json='["self-hosted"]' ;;
             \[*) preferred_json="$PREFERRED" ;;
             *) preferred_json="[\"$PREFERRED\"]" ;;
           esac
           echo "preferred runner: $preferred_json"
-          if [ -z "$RUNNER_ADMIN_TOKEN" ] || ! echo "$preferred_json" | grep -q "self-hosted"; then
+          if [ -n "$PREFERRED" ]; then
+            echo "caller specified runs-on explicitly; using it as-is (no fallback)"
+            echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ -z "$RUNNER_ADMIN_TOKEN" ]; then
             echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"; exit 0
           fi
           resp=$(curl -sf -H "Authorization: Bearer $RUNNER_ADMIN_TOKEN" \
