@@ -127,7 +127,6 @@ jobs:
           add-paths: |
             .pre-commit-config.yaml
             .github/workflows/*.yml
-            .github/workflows/*.yaml
             .github/scripts/*.py
 
       # main has no branch protection, so native auto-merge is unavailable; merge directly
