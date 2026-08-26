@@ -26,6 +26,13 @@ on:
         required: false
         default: 10
     secrets:
+      runner_admin_token:
+        description: >-
+          Token with the org "Self-hosted runners: read" permission. When set,
+          the deploy job runs on the preferred (self-hosted) runner only if one
+          is idle, falling back to ubuntu-latest instead of queueing. When
+          absent, runs-on is used as-is.
+        required: false
       slack_webhook_url:
         description: "notify slack on github action result"
         required: false
@@ -46,10 +53,56 @@ permissions:
   contents: read
 
 jobs:
+  # Prefer the self-hosted runner but never block on it: with a
+  # runner_admin_token, fetch all registered runners and route to the
+  # preferred one only when an idle runner matching every preferred label
+  # exists, else fall back to ubuntu-latest. Without the token (or when the
+  # preferred runner is not self-hosted, or the API fails), keep the
+  # caller's runs-on unchanged.
+  pick-runner:
+    name: Pick runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      runs-on: ${{ steps.pick.outputs.runs-on }}
+    steps:
+      - id: pick
+        env:
+          RUNNER_ADMIN_TOKEN: ${{ secrets.runner_admin_token }}
+          PREFERRED: ${{ inputs.runs-on }}
+        run: |
+          case "$PREFERRED" in
+            \[*) preferred_json="$PREFERRED" ;;
+            *) preferred_json="[\"$PREFERRED\"]" ;;
+          esac
+          echo "preferred runner: $preferred_json"
+          if [ -z "$RUNNER_ADMIN_TOKEN" ] || ! echo "$preferred_json" | grep -q "self-hosted"; then
+            echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          resp=$(curl -sf -H "Authorization: Bearer $RUNNER_ADMIN_TOKEN" \
+            "https://api.github.com/orgs/${{ github.repository_owner }}/actions/runners?per_page=100") \
+            || { echo "::warning::runner API check failed, keeping preferred runner"; echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"; exit 0; }
+          echo "registered self-hosted runners:"
+          echo "$resp" | jq -r '.runners[] | "  \(.name)\t[\([.labels[].name] | join(","))]\tstatus=\(.status)\tbusy=\(.busy)"'
+          # count idle runners that carry EVERY preferred label (case-insensitive),
+          # so '["self-hosted", "Linux"]' does not match an idle macOS runner
+          idle=$(echo "$resp" | jq --argjson want "$preferred_json" \
+            '[.runners[]
+              | select(.status == "online" and .busy == false)
+              | ([.labels[].name] | map(ascii_downcase)) as $have
+              | select($want | map(ascii_downcase) | all(. as $l | $have | index($l)))
+             ] | length')
+          echo "idle runners matching $preferred_json: ${idle:-0}"
+          if [ "${idle:-0}" -ge 1 ]; then
+            echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"
+          else
+            echo 'runs-on=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
     name: Pass input and secrets to my-action
-    # Single label ("self-hosted") or a JSON array of labels ('["self-hosted", "Linux"]').
-    runs-on: ${{ contains(inputs.runs-on, '[') && fromJSON(inputs.runs-on) || inputs.runs-on }}
+    needs: pick-runner
+    runs-on: ${{ fromJSON(needs.pick-runner.outputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       env_base64: ${{ secrets.env_base64 }}

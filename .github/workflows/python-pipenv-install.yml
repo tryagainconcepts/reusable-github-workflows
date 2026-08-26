@@ -105,8 +105,15 @@ jobs:
             || { echo "::warning::runner API check failed, keeping preferred runner"; echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"; exit 0; }
           echo "registered self-hosted runners:"
           echo "$resp" | jq -r '.runners[] | "  \(.name)\t[\([.labels[].name] | join(","))]\tstatus=\(.status)\tbusy=\(.busy)"'
-          idle=$(echo "$resp" | jq '[.runners[] | select(.status == "online" and .busy == false)] | length')
-          echo "idle self-hosted runners: ${idle:-0}"
+          # count idle runners that carry EVERY preferred label (case-insensitive),
+          # so '["self-hosted", "Linux"]' does not match an idle macOS runner
+          idle=$(echo "$resp" | jq --argjson want "$preferred_json" \
+            '[.runners[]
+              | select(.status == "online" and .busy == false)
+              | ([.labels[].name] | map(ascii_downcase)) as $have
+              | select($want | map(ascii_downcase) | all(. as $l | $have | index($l)))
+             ] | length')
+          echo "idle runners matching $preferred_json: ${idle:-0}"
           if [ "${idle:-0}" -ge 1 ]; then
             echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"
           else
@@ -209,7 +216,10 @@ jobs:
           AUDIT_IGNORE_PACKAGES: ${{ inputs.audit_ignore_packages }}
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@315db7fe45ac2880b7758f1933e6e5d59afd5e94 # 1.12.1
-        if: inputs.setup_mongo && !contains(inputs.runs-on, 'self-hosted')
+        # Key off the runner actually chosen by pick-runner: when it falls back
+        # to ubuntu-latest, Mongo must be started even though the preferred
+        # input said self-hosted.
+        if: inputs.setup_mongo && !contains(needs.pick-runner.outputs.runs-on, 'self-hosted')
       - name: Setup ENV
         run: |
           echo "$env_base64" | base64 -d > .env
