@@ -143,6 +143,39 @@ jobs:
     env:
       env_base64: ${{ secrets.env_base64 }}
     steps:
+      # Fail fast on a non-Conventional-Commit PR title. Squash-merges use the
+      # PR title as the commit message, which release-please parses to cut a
+      # release; a title it can't parse makes it SILENTLY skip the release (no
+      # error, no published version). Turn that silent skip into a hard, early
+      # failure so the requirement is explicit rather than implicit.
+      - name: Lint PR title (Conventional Commits)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const title = (context.payload.pull_request.title || "").trim();
+            const TYPES = "build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test";
+            const conventional = new RegExp(`^(${TYPES})(\\([^)]+\\))?!?: .+`);
+            if (!conventional.test(title)) {
+              core.setFailed(
+                `PR title is not a Conventional Commit:\n  "${title}"\n\n` +
+                `Squash-merges use the PR title as the commit message, and ` +
+                `release-please will SILENTLY skip the release if it can't parse it.\n` +
+                `Use "<type>: <subject>", e.g. "feat: add X", "fix: correct Y", ` +
+                `"chore: bump deps" (optional scope: "feat(admin): ...").\n` +
+                `Types: ${TYPES.replace(/\\|/g, ", ")}.`
+              );
+              return;
+            }
+            // Valid title, but only feat/fix/! actually produce a release.
+            const releasing = /^(feat|fix)(\([^)]+\))?: /.test(title) || title.includes("!:");
+            if (!releasing) {
+              core.notice(
+                `Title "${title}" is a valid Conventional Commit but its type ` +
+                `won't trigger a release (only feat, fix, or a breaking "!" do). ` +
+                `That's fine for non-release changes.`
+              );
+            }
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -324,9 +357,13 @@ jobs:
     # fallback to ubuntu-latest when none is idle).
     runs-on: ${{ fromJSON(needs.pick-runner.outputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    needs: [pick-runner, build-test-deploy, automerge]
+    # Ordered after release-please so a release (version bump + commit + tag) is
+    # cut before we publish/deploy. release-please only runs on main, so on the
+    # PR-automerge path it is skipped; !cancelled() keeps this job running then.
+    needs: [pick-runner, build-test-deploy, automerge, release-please]
     # Run on a push to main, or right after this run merged a PR into main.
-    # (!cancelled() because automerge is skipped on main and would otherwise skip us.)
+    # (!cancelled() because automerge/release-please are skipped on some paths
+    # and would otherwise skip us.)
     if: >-
       !cancelled() && needs.build-test-deploy.result == 'success' &&
       (github.ref == 'refs/heads/main' || needs.automerge.outputs.mergeResult == 'merged')
@@ -374,10 +411,13 @@ jobs:
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
       # Version bumps, tags, CHANGELOG.md, and GitHub releases are handled by
-      # the release-please job below (merge its release PR to cut a release);
-      # the per-deploy `uv version --bump minor` + tag push used to live here.
+      # the release-please job (merge its release PR to cut a release); the
+      # per-deploy `uv version --bump minor` + tag push used to live here.
+      # Publish only when release-please actually cut a release this run (the
+      # release-PR merge), so pyproject is already bumped and we never re-publish
+      # an existing version on ordinary main pushes.
       - name: Release pypi on main branch
-        if: inputs.pypi_release
+        if: inputs.pypi_release && needs.release-please.outputs.release_created == 'true'
         run: |
           make release-s3
         env:
@@ -389,7 +429,7 @@ jobs:
     name: Notify
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [build-test-deploy, automerge, release]
+    needs: [build-test-deploy, automerge, release, release-please]
     if: always()
     steps:
       - name: Determine overall result
@@ -398,10 +438,11 @@ jobs:
           BUILD: ${{ needs.build-test-deploy.result }}
           MERGE: ${{ needs.automerge.result }}
           RELEASE: ${{ needs.release.result }}
+          RELEASE_PLEASE: ${{ needs.release-please.result }}
         run: |
-          stage="CI"; [ "$RELEASE" != "skipped" ] && stage="Deploy"
+          stage="CI"; { [ "$RELEASE" != "skipped" ] || [ "$RELEASE_PLEASE" != "skipped" ]; } && stage="Deploy"
           status=success
-          for r in "$BUILD" "$MERGE" "$RELEASE"; do
+          for r in "$BUILD" "$MERGE" "$RELEASE" "$RELEASE_PLEASE"; do
             case "$r" in
               failure) status=failure ;;
               cancelled) [ "$status" = success ] && status=cancelled ;;
@@ -412,7 +453,7 @@ jobs:
             cancelled) title="🚫 $stage Cancelled" ;;
             *)         title="❌ $stage Failed" ;;
           esac
-          echo "build=$BUILD automerge=$MERGE release=$RELEASE -> $title"
+          echo "build=$BUILD automerge=$MERGE release=$RELEASE release-please=$RELEASE_PLEASE -> $title"
           { echo "status=$status"; echo "title=$title"; } >> "$GITHUB_OUTPUT"
       - name: Setup uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -564,14 +605,38 @@ jobs:
     # not follow the convention simply get generic changelog entries);
     # merging that PR bumps pyproject.toml, updates CHANGELOG.md, tags the
     # release, and publishes a GitHub release.
-    if: "!cancelled() && endsWith(github.ref, '/main') && needs.release.result == 'success'"
-    needs: [build-test-deploy, release]
+    if: "!cancelled() && endsWith(github.ref, '/main') && needs.build-test-deploy.result == 'success'"
+    needs: [build-test-deploy]
+    outputs:
+      release_created: ${{ steps.release_please.outputs.release_created }}
     permissions:
       contents: write
       pull-requests: write
     steps:
-      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+      - id: release_please
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         with:
           # caller repos may provide release-please-config.json +
           # .release-please-manifest.json to override this config-less default
           release-type: python
+      # Fail loud when a push to main advanced HEAD but release-please has
+      # nothing to release AND no pending release PR -- the silent-skip case
+      # (e.g. a non-Conventional-Commit that release-please can't parse). If a
+      # release was cut (`release_created`) or a release PR is open (`pr` set),
+      # this passes.
+      - name: Fail if release-please produced no release or release PR
+        # Only enforced for repos that publish (pypi_release); app-only repos
+        # using deploy_script may not follow Conventional Commits and shouldn't
+        # be blocked here.
+        if: >-
+          inputs.pypi_release &&
+          steps.release_please.outputs.release_created != 'true' &&
+          (steps.release_please.outputs.pr == '' || steps.release_please.outputs.pr == null)
+        run: |
+          echo "::error title=release-please skipped::No release was cut and no release PR is open."
+          echo "release-please found no releasable commits since the last release."
+          echo "The most likely cause is a commit on main whose message is not a"
+          echo "Conventional Commit (release-please cannot parse it, so it is ignored"
+          echo "and nothing is ever published). Land a conventional commit"
+          echo '(e.g. "feat: ..." / "fix: ...") on main to cut a release.'
+          exit 1

@@ -151,7 +151,16 @@ jobs:
         with:
           base: main
           token: ${{ secrets.checkout_token }}
-          title: '[Automated] Update Python Package'
+          # Conventional Commit title + message so the PR passes the
+          # Conventional-Commits check and release-please can parse the merged
+          # commit (it auto-merges with MERGE, so the commit message matters as
+          # much as the title). Use "fix(deps)" (a patch-level release) rather
+          # than "chore(deps)": a chore alone is not releasable, so release-please
+          # would open no release PR and the release-please loud-fail would trip
+          # on the post-merge main run -- and the refreshed deps would never be
+          # published. "fix(deps)" cuts a patch so the update actually ships.
+          title: 'fix(deps): update python dependencies'
+          commit-message: 'fix(deps): update python dependencies'
           labels: |
             automated
             automerge
