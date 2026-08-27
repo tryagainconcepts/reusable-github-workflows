@@ -79,18 +79,22 @@ jobs:
             || { echo "::warning::runner API check failed, keeping preferred runner"; echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"; exit 0; }
           echo "registered self-hosted runners:"
           echo "$resp" | jq -r '.runners[] | "  \(.name)\t[\([.labels[].name] | join(","))]\tstatus=\(.status)\tbusy=\(.busy)"'
-          # count idle runners that carry EVERY preferred label (case-insensitive),
-          # so '["self-hosted", "Linux"]' does not match an idle macOS runner
-          idle=$(echo "$resp" | jq --argjson want "$preferred_json" \
+          # package-update runs on a monthly cron that fires in every repo at the
+          # same minute, so self-hosted runners are usually all BUSY at once.
+          # Prefer self-hosted whenever one is ONLINE (queue if busy) rather than
+          # stampeding onto GitHub-hosted runners; only fall back to ubuntu-latest
+          # when NO self-hosted runner carrying every preferred label is online.
+          online=$(echo "$resp" | jq --argjson want "$preferred_json" \
             '[.runners[]
-              | select(.status == "online" and .busy == false)
+              | select(.status == "online")
               | ([.labels[].name] | map(ascii_downcase)) as $have
               | select($want | map(ascii_downcase) | all(. as $l | $have | index($l)))
              ] | length')
-          echo "idle runners matching $preferred_json: ${idle:-0}"
-          if [ "${idle:-0}" -ge 1 ]; then
+          echo "online runners matching $preferred_json: ${online:-0} (queue if all busy)"
+          if [ "${online:-0}" -ge 1 ]; then
             echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"
           else
+            echo "no online self-hosted runner; falling back to ubuntu-latest"
             echo 'runs-on=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
           fi
 
@@ -151,6 +155,11 @@ jobs:
         with:
           base: main
           token: ${{ secrets.checkout_token }}
+          # Fixed head branch so the CI run this PR triggers can reliably detect
+          # it (pick-runner keys off github.head_ref, which -- unlike the labels
+          # below -- is present on the initial "opened" event) and prefer the
+          # self-hosted fleet over GitHub-hosted for the monthly fan-out.
+          branch: automated/package-update
           # Conventional Commit title + message so the PR passes the
           # Conventional-Commits check and release-please can parse the merged
           # commit (it auto-merges with MERGE, so the commit message matters as

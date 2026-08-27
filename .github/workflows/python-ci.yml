@@ -103,6 +103,14 @@ jobs:
         env:
           RUNNER_ADMIN_TOKEN: ${{ secrets.runner_admin_token }}
           PREFERRED: ${{ inputs.runs-on }}
+          # True only for the automated package-upgrade PR, whose head branch
+          # package_update.yml fixes to "automated/package-update". These all fire
+          # on the same monthly cron, so for them we prefer self-hosted whenever
+          # one is ONLINE (queue if busy) instead of stampeding onto GitHub-hosted.
+          # Keyed off head_ref (present on the initial "opened" event, unlike the
+          # PR labels). Human PRs keep the fast path: prefer a FREE runner, fall
+          # back to GitHub-hosted when busy.
+          IS_AUTOMATED: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'automated/package-update') }}
         run: |
           case "$PREFERRED" in
             "") preferred_json='["self-hosted"]' ;;
@@ -122,16 +130,20 @@ jobs:
             || { echo "::warning::runner API check failed, keeping preferred runner"; echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"; exit 0; }
           echo "registered self-hosted runners:"
           echo "$resp" | jq -r '.runners[] | "  \(.name)\t[\([.labels[].name] | join(","))]\tstatus=\(.status)\tbusy=\(.busy)"'
-          # count idle runners that carry EVERY preferred label (case-insensitive),
-          # so '["self-hosted", "Linux"]' does not match an idle macOS runner
-          idle=$(echo "$resp" | jq --argjson want "$preferred_json" \
+          # Automated package-upgrade PR: count ONLINE runners (busy included) so
+          # it queues on the fleet. Otherwise count only FREE (online & not busy)
+          # runners so human PRs fall back to GitHub-hosted for fast feedback.
+          # Match runners carrying EVERY preferred label (case-insensitive), so
+          # '["self-hosted", "Linux"]' does not match an idle macOS runner.
+          if [ "$IS_AUTOMATED" = "true" ]; then require_free=false; kind="online"; else require_free=true; kind="free"; fi
+          count=$(echo "$resp" | jq --argjson want "$preferred_json" --argjson require_free "$require_free" \
             '[.runners[]
-              | select(.status == "online" and .busy == false)
+              | select(.status == "online" and ((.busy | not) or ($require_free | not)))
               | ([.labels[].name] | map(ascii_downcase)) as $have
               | select($want | map(ascii_downcase) | all(. as $l | $have | index($l)))
              ] | length')
-          echo "idle runners matching $preferred_json: ${idle:-0}"
-          if [ "${idle:-0}" -ge 1 ]; then
+          echo "$kind runners matching $preferred_json: ${count:-0}$( [ "$IS_AUTOMATED" = "true" ] && echo ' (queue if busy)' )"
+          if [ "${count:-0}" -ge 1 ]; then
             echo "runs-on=$preferred_json" >> "$GITHUB_OUTPUT"
           else
             echo 'runs-on=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
@@ -266,10 +278,12 @@ jobs:
           AUDIT_IGNORE_PACKAGES: ${{ inputs.audit_ignore_packages }}
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@315db7fe45ac2880b7758f1933e6e5d59afd5e94 # 1.12.1
-        # Key off the runner actually chosen by pick-runner: when it falls back
-        # to ubuntu-latest, Mongo must be started even though the preferred
-        # input said self-hosted.
-        if: inputs.setup_mongo && !contains(needs.pick-runner.outputs.runs-on, 'self-hosted')
+        # Only on GitHub-hosted runners. This Docker action builds an image
+        # (~minutes) and self-hosted runners already provide Mongo, so skip it
+        # there. `runner.environment` reflects the ACTUAL runner, so it is
+        # correct even when a self-hosted runner is targeted by custom labels
+        # (Linux/X64) that don't contain the literal "self-hosted".
+        if: inputs.setup_mongo && runner.environment != 'self-hosted'
       - name: Setup ENV
         run: |
           echo "$env_base64" | base64 -d > .env
@@ -367,8 +381,10 @@ jobs:
     runs-on: ${{ fromJSON(needs.pick-runner.outputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     # Ordered after release-please so a release (version bump + commit + tag) is
-    # cut before we publish/deploy. release-please only runs on main, so on the
-    # PR-automerge path it is skipped; !cancelled() keeps this job running then.
+    # cut before we publish/deploy. release-please runs on a main push and on the
+    # automerge path; either way it may be skipped, so !cancelled() (below) keeps
+    # this job running. The pypi publish step is gated on release_created; the
+    # deploy_script step is not, so app deploys still run on every main push.
     needs: [pick-runner, build-test-deploy, automerge, release-please]
     # Run on a push to main, or right after this run merged a PR into main.
     # (!cancelled() because automerge/release-please are skipped on some paths
