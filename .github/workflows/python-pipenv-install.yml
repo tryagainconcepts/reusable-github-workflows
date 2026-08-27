@@ -58,6 +58,15 @@ on:
         required: false
       pipy_registry_auth:
         required: false
+      release_please_token:
+        description: >-
+          PAT used by release-please to open its release PR. Required for the
+          release train to be fully hands-off: a PR opened with the default
+          GITHUB_TOKEN does NOT trigger CI/automerge on itself, so the release PR
+          would sit unmerged. With this PAT the release PR triggers CI and, being
+          labelled "automerge", merges automatically. When absent, release-please
+          falls back to GITHUB_TOKEN and its release PR must be merged manually.
+        required: false
       slack_webhook_url:
         description: "notify slack on github action result"
         required: false
@@ -600,13 +609,20 @@ jobs:
     name: Release Please
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Runs on main after a successful deploy. Maintains a running "release PR"
-    # that accumulates Conventional Commits (not enforced; commits that do
-    # not follow the convention simply get generic changelog entries);
-    # merging that PR bumps pyproject.toml, updates CHANGELOG.md, tags the
-    # release, and publishes a GitHub release.
-    if: "!cancelled() && endsWith(github.ref, '/main') && needs.build-test-deploy.result == 'success'"
-    needs: [build-test-deploy]
+    # Maintains a running "release PR" that accumulates Conventional Commits
+    # (not enforced; commits that do not follow the convention simply get
+    # generic changelog entries); merging that PR bumps pyproject.toml, updates
+    # CHANGELOG.md, tags the release, and publishes a GitHub release.
+    #
+    # Runs on a push to main OR right after the automerge job merged a PR in
+    # this run. The latter matters because automerge merges with GITHUB_TOKEN,
+    # which does NOT emit a push event on main -- so release-please would never
+    # run post-merge. It operates on `main` via the API (target-branch), so it
+    # works even though this run's ref is the PR branch.
+    if: >-
+      !cancelled() && needs.build-test-deploy.result == 'success' &&
+      (github.ref == 'refs/heads/main' || needs.automerge.outputs.mergeResult == 'merged')
+    needs: [build-test-deploy, automerge]
     outputs:
       release_created: ${{ steps.release_please.outputs.release_created }}
     permissions:
@@ -616,9 +632,36 @@ jobs:
       - id: release_please
         uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         with:
+          # Open the release PR with a PAT (when provided) so it triggers CI on
+          # itself and can be auto-merged; a PR opened with GITHUB_TOKEN does
+          # not trigger workflows, so it would sit unmerged. Falls back to
+          # GITHUB_TOKEN (release PR must then be merged manually).
+          token: ${{ secrets.release_please_token || github.token }}
+          # Operate on main explicitly: when this job runs in the automerge run,
+          # github.ref is the PR branch, but the merge already landed on main.
+          target-branch: main
           # caller repos may provide release-please-config.json +
           # .release-please-manifest.json to override this config-less default
           release-type: python
+      # Label the release PR "automerge" so the automerge job merges it once its
+      # checks pass -- making the release train fully hands-off. Only meaningful
+      # when a PAT opened the PR (otherwise no CI runs on it); harmless otherwise.
+      - name: Label release PR for auto-merge
+        if: steps.release_please.outputs.pr != '' && steps.release_please.outputs.pr != null
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          github-token: ${{ secrets.release_please_token || github.token }}
+          script: |
+            const pr = JSON.parse(process.env.RP_PR);
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels: ["automerge"],
+            });
+            core.info(`Labelled release PR #${pr.number} with "automerge".`);
+        env:
+          RP_PR: ${{ steps.release_please.outputs.pr }}
       # Fail loud when a push to main advanced HEAD but release-please has
       # nothing to release AND no pending release PR -- the silent-skip case
       # (e.g. a non-Conventional-Commit that release-please can't parse). If a
