@@ -78,35 +78,6 @@ permissions:
   pull-requests: write
 
 jobs:
-  # Check Conventional Commits on PR titles: with squash merges the PR
-  # title becomes the commit message release-please reads, so malformed
-  # titles drop changes from CHANGELOG.md and version bumps. Advisory only
-  # (continue-on-error): the job annotates the run but never fails it.
-  lint-pr-title:
-    name: PR Title
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    continue-on-error: true
-    permissions:
-      pull-requests: read
-    steps:
-      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          types: |
-            feat
-            fix
-            perf
-            deps
-            test
-            ci
-            chore
-            docs
-            refactor
-            revert
-
   # Prefer the self-hosted runner but never block on it: with a
   # runner_admin_token, route to the preferred runner only when an idle
   # self-hosted runner exists, else fall back to ubuntu-latest. Without the
@@ -589,7 +560,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Runs on main after a successful deploy. Maintains a running "release PR"
-    # that accumulates Conventional Commits (enforced by lint-pr-title);
+    # that accumulates Conventional Commits (not enforced; commits that do
+    # not follow the convention simply get generic changelog entries);
     # merging that PR bumps pyproject.toml, updates CHANGELOG.md, tags the
     # release, and publishes a GitHub release.
     if: "!cancelled() && endsWith(github.ref, '/main') && needs.release.result == 'success'"
