@@ -31,7 +31,7 @@ lint: ## Run Ruff and all configured pre-commit checks.
 	uvx pre-commit run --all-files
 
 test: lint ## Run the test suite in the locked environment (parallel).
-	uv run --no-sync python -m pytest -n auto --dist loadfile -l tests
+	uv run --no-sync python -m pytest -n auto --dist loadfile -x --log-level=INFO -l tests
 
 clean: clean-build clean-pyc ## Remove generated build and Python artifacts.
 
