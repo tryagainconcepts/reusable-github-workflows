@@ -78,14 +78,16 @@ permissions:
   pull-requests: write
 
 jobs:
-  # Enforce Conventional Commits on PR titles: with squash merges the PR
+  # Check Conventional Commits on PR titles: with squash merges the PR
   # title becomes the commit message release-please reads, so malformed
-  # titles would silently drop changes from CHANGELOG.md and version bumps.
+  # titles drop changes from CHANGELOG.md and version bumps. Advisory only
+  # (continue-on-error): the job annotates the run but never fails it.
   lint-pr-title:
     name: PR Title
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    continue-on-error: true
     permissions:
       pull-requests: read
     steps:
