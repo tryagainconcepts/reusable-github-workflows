@@ -31,7 +31,8 @@ lint: ## Run Ruff and all configured pre-commit checks.
 	uvx pre-commit run --all-files
 
 test: lint ## Run the test suite in the locked environment (parallel when pytest-xdist is installed).
-	@uv run --no-sync python -c "import xdist" 2>/dev/null \
+	@[ -f .env ] && { echo "sourcing .env"; set -a; . ./.env; set +a; } || true; \
+	uv run --no-sync python -c "import xdist" 2>/dev/null \
 	  && flags="-n auto --dist loadfile" \
 	  || { flags=""; echo "pytest-xdist not installed; running serially"; }; \
 	set -x; uv run --no-sync python -m pytest $$flags -x --log-level=INFO -l tests
