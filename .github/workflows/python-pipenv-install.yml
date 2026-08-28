@@ -154,10 +154,12 @@ jobs:
     # builds and tests — merge and deploy live in the jobs below.
     name: Build Test and Deploy
     # A newer push to the same ref supersedes this build; cancel the older run
-    # instead of paying for both. Runs on main are never cancelled.
+    # instead of paying for both. This applies on main too, so an intermediate
+    # commit's run (and its deploy/release) can be cancelled by a newer push --
+    # only the tip of main is built and shipped.
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-build-test
-      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+      cancel-in-progress: true
     needs: pick-runner
     runs-on: ${{ fromJSON(needs.pick-runner.outputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
