@@ -154,10 +154,6 @@ jobs:
           fi
 
   build-test-deploy:
-    # Cancel the same job from an older run on the same branch.
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-build-test-deploy
-      cancel-in-progress: true
     # Job id/name kept for rulesets that require this status check; it now only
     # builds and tests — merge and deploy live in the jobs below.
     name: Build Test and Deploy
