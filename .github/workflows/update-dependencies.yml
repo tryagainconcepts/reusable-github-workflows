@@ -4,16 +4,19 @@ name: Update dependencies
 #   1. pre-commit hooks  -> `pre-commit autoupdate` on .pre-commit-config.yaml
 #   2. GitHub Actions    -> bump SHA pins in .github/workflows/ to the latest release
 # Gated by zizmor (no *new* findings) and by the pre-commit hooks passing;
-# auto-merged when both are green, otherwise the PR is left open for review.
+# the PR is always left open for manual review and merge — since this
+# workflow edits workflow files, the branch is pushed with a GitHub App
+# token (contents + pull-requests + workflows permissions).
 
 on:
   schedule:
     - cron: '0 5 * * 1' # Every Monday at 05:00 UTC
   workflow_dispatch:
 
+# All writes (branch push, PR creation) use the minted app token; the
+# workflow's own GITHUB_TOKEN stays read-only.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 # Cancel an older still-running instance of this workflow on the same ref.
 concurrency:
@@ -119,9 +122,9 @@ jobs:
             cat "$RUNNER_TEMP/zizmor-summary.md"
             echo
             if [ "$GATE_OUTCOME" = "success" ] && [ "$HOOKS_OUTCOME" = "success" ]; then
-              echo '✅ All checks green — auto-merged.'
+              echo '✅ All checks green — ready to merge manually.'
             else
-              echo '⚠️ **Not** auto-merged; please review.'
+              echo '⚠️ Checks failed; please review before merging.'
             fi
           } > "$RUNNER_TEMP/pr-body.md"
           {
@@ -132,10 +135,20 @@ jobs:
         env:
           HOOKS_OUTCOME: ${{ steps.hooks.outcome }}
           GATE_OUTCOME: ${{ steps.gate.outcome }}
+      # GITHUB_TOKEN cannot push commits that modify .github/workflows/, so the
+      # PR is created and merged with a GitHub App token that has the
+      # contents, pull-requests, and workflows permissions.
+      - name: Mint app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Create Pull Request
         id: cpr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
+          token: ${{ steps.app-token.outputs.token }}
           commit-message: 'chore: update pre-commit hooks and GitHub Actions pins'
           title: 'chore: update dependencies'
           body-path: ${{ runner.temp }}/pr-body.md
@@ -149,16 +162,9 @@ jobs:
             .github/workflows/*.yml
             .github/scripts/*.py
 
-      # main has no branch protection, so native auto-merge is unavailable; merge directly
-      # once both gates have passed. Bot-created PRs (GITHUB_TOKEN) never trigger the
-      # pull_request zizmor workflow, which is why the analysis runs in this job instead.
-      - name: Auto-merge
-        if: steps.cpr.outputs.pull-request-number != '' && steps.gate.outcome == 'success' && steps.hooks.outcome == 'success'
-        run: gh pr merge --merge --delete-branch "$PR_NUMBER"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+      # No auto-merge: this workflow updates workflow files themselves, so a
+      # human reviews and merges the PR. The gate results are recorded in the
+      # PR body and the job summary.
       - name: Fail if a gate did not pass
         if: steps.gate.outcome == 'failure' || steps.hooks.outcome == 'failure'
         run: |
