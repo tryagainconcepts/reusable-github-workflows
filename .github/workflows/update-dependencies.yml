@@ -23,10 +23,25 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Python version resolution: if pyproject.toml declares requires-python,
+      # leave python-version empty so uv resolves it from there; otherwise fall
+      # back to the default version 3.14.
+      - name: Resolve Python version source
+        id: pyver
+        env:
+          PYTHON_VERSION_INPUT: '3.14'
+        run: |
+          if [ -f pyproject.toml ] && grep -Eq '^\s*requires-python\s*=' pyproject.toml; then
+            echo "pyproject.toml declares requires-python; letting uv resolve it"
+            echo "python-version=" >> "$GITHUB_OUTPUT"
+          else
+            echo "no requires-python found; using fallback python version $PYTHON_VERSION_INPUT"
+            echo "python-version=$PYTHON_VERSION_INPUT" >> "$GITHUB_OUTPUT"
+          fi
       - name: Setup uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          python-version: '3.14'
+          python-version: ${{ steps.pyver.outputs.python-version }}
           enable-cache: ${{ runner.environment != 'self-hosted' }}
 
       # Baselines, so the gates below only fail on what this run introduces.

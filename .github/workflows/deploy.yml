@@ -139,10 +139,25 @@ jobs:
           GH_EVENT_NAME: ${{ github.event_name }}
       # uv provisions both itself and the Python interpreter on every runner
       # (hosted and self-hosted), so workflows never depend on the machine's Python.
+      # Python version resolution: if pyproject.toml declares requires-python,
+      # leave python-version empty so uv resolves it from there; otherwise fall
+      # back to the python_version workflow input.
+      - name: Resolve Python version source
+        id: pyver
+        env:
+          PYTHON_VERSION_INPUT: ${{ inputs.python_version }}
+        run: |
+          if [ -f pyproject.toml ] && grep -Eq '^\s*requires-python\s*=' pyproject.toml; then
+            echo "pyproject.toml declares requires-python; letting uv resolve it"
+            echo "python-version=" >> "$GITHUB_OUTPUT"
+          else
+            echo "no requires-python found; using input python_version=$PYTHON_VERSION_INPUT"
+            echo "python-version=$PYTHON_VERSION_INPUT" >> "$GITHUB_OUTPUT"
+          fi
       - name: Setup uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          python-version-file: "pyproject.toml"
+          python-version: ${{ steps.pyver.outputs.python-version }}
           enable-cache: ${{ runner.environment != 'self-hosted' }}
       # Runs a single command using the runners shell
       - name: Run a one-line script
