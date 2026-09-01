@@ -4,9 +4,9 @@ name: Update dependencies
 #   1. pre-commit hooks  -> `pre-commit autoupdate` on .pre-commit-config.yaml
 #   2. GitHub Actions    -> bump SHA pins in .github/workflows/ to the latest release
 # Gated by zizmor (no *new* findings) and by the pre-commit hooks passing;
-# the PR is always left open for manual review and merge — since this
-# workflow edits workflow files, the branch is pushed with a GitHub App
-# token (contents + pull-requests + workflows permissions).
+# auto-merged when both are green, otherwise the PR is left open for review.
+# All writes use a GitHub App token (contents + pull-requests + workflows
+# permissions), since GITHUB_TOKEN cannot push workflow-file changes.
 
 on:
   schedule:
@@ -122,9 +122,9 @@ jobs:
             cat "$RUNNER_TEMP/zizmor-summary.md"
             echo
             if [ "$GATE_OUTCOME" = "success" ] && [ "$HOOKS_OUTCOME" = "success" ]; then
-              echo '✅ All checks green — ready to merge manually.'
+              echo '✅ All checks green — auto-merged.'
             else
-              echo '⚠️ Checks failed; please review before merging.'
+              echo '⚠️ **Not** auto-merged; please review.'
             fi
           } > "$RUNNER_TEMP/pr-body.md"
           {
@@ -162,9 +162,15 @@ jobs:
             .github/workflows/*.yml
             .github/scripts/*.py
 
-      # No auto-merge: this workflow updates workflow files themselves, so a
-      # human reviews and merges the PR. The gate results are recorded in the
-      # PR body and the job summary.
+      # main has no branch protection, so native auto-merge is unavailable; merge directly
+      # once both gates have passed, using the app token (GITHUB_TOKEN is read-only here).
+      - name: Auto-merge
+        if: steps.cpr.outputs.pull-request-number != '' && steps.gate.outcome == 'success' && steps.hooks.outcome == 'success'
+        run: gh pr merge --merge --delete-branch "$PR_NUMBER"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
       - name: Fail if a gate did not pass
         if: steps.gate.outcome == 'failure' || steps.hooks.outcome == 'failure'
         run: |
