@@ -713,7 +713,7 @@ jobs:
       pull-requests: write
     steps:
       - id: release_please
-        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           # Open the release PR with a PAT (when provided) so it triggers CI on
           # itself and can be auto-merged; a PR opened with GITHUB_TOKEN does
