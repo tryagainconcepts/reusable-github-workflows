@@ -63,6 +63,10 @@ jobs:
   # preferred runner is not self-hosted, or the API fails), keep the
   # caller's runs-on unchanged.
   pick-runner:
+    # Cancel the same job from an older run on the same branch.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-pick-runner
+      cancel-in-progress: true
     name: Pick runner
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -108,6 +112,10 @@ jobs:
           fi
 
   deploy:
+    # Cancel the same job from an older run on the same branch.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-deploy
+      cancel-in-progress: true
     name: Pass input and secrets to my-action
     needs: pick-runner
     runs-on: ${{ fromJSON(needs.pick-runner.outputs.runs-on) }}

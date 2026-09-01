@@ -15,6 +15,11 @@ permissions:
   contents: write
   pull-requests: write
 
+# Cancel an older still-running instance of this workflow on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   update:
     runs-on: ubuntu-latest

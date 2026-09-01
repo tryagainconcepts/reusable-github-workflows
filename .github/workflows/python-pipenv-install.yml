@@ -93,6 +93,10 @@ jobs:
   # token (or when the preferred runner is not self-hosted, or the API
   # fails), keep the caller's runs-on unchanged.
   pick-runner:
+    # Cancel the same job from an older run on the same branch.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-pick-runner
+      cancel-in-progress: true
     name: Pick runner
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -150,6 +154,10 @@ jobs:
           fi
 
   build-test-deploy:
+    # Cancel the same job from an older run on the same branch.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-build-test-deploy
+      cancel-in-progress: true
     # Job id/name kept for rulesets that require this status check; it now only
     # builds and tests — merge and deploy live in the jobs below.
     name: Build Test and Deploy
@@ -322,6 +330,10 @@ jobs:
   # in its own job; deploy then runs in a separate job (a merge done with
   # GITHUB_TOKEN does not trigger a new run on main, so it must happen here).
   automerge:
+    # Cancel the same job from an older run on the same branch.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-automerge
+      cancel-in-progress: true
     name: Automerge
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -391,6 +403,10 @@ jobs:
             core.setOutput("mergeResult", result);
 
   release:
+    # Cancel the same job from an older run on the same branch.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-release
+      cancel-in-progress: true
     name: Deploy
     # Same runner selection as build-test-deploy: pick-runner's choice
     # (caller's explicit runs-on respected as-is; otherwise self-hosted with
@@ -483,6 +499,10 @@ jobs:
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
 
   notify:
+    # Cancel the same job from an older run on the same branch.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-notify
+      cancel-in-progress: true
     name: Notify
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -669,6 +689,10 @@ jobs:
           fi
           echo "Teams notification sent (HTTP $HTTP_CODE)"
   release-please:
+    # Cancel the same job from an older run on the same branch.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-release-please
+      cancel-in-progress: true
     name: Release Please
     runs-on: ubuntu-latest
     timeout-minutes: 10
