@@ -270,6 +270,8 @@ jobs:
       # pre-commit/action is maintenance-only; run pre-commit directly via uvx instead.
       - name: Run pre-commit
         run: uvx pre-commit run --show-diff-on-failure --color=always --all-files
+        env:
+          UV_PYTHON: ${{ inputs.python_version }}
       - name: install package
         run: |
           IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
