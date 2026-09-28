@@ -242,7 +242,7 @@ jobs:
             echo "python-version=$PYTHON_VERSION_INPUT" >> "$GITHUB_OUTPUT"
           fi
       - name: Setup uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ steps.pyver.outputs.python-version }}
           # Wheel cache keyed on uv.lock; hosted runners only -- self-hosted
@@ -446,7 +446,7 @@ jobs:
             echo "python-version=$PYTHON_VERSION_INPUT" >> "$GITHUB_OUTPUT"
           fi
       - name: Setup uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ steps.pyver2.outputs.python-version }}
           # Wheel cache keyed on uv.lock; hosted runners only -- self-hosted
@@ -546,7 +546,7 @@ jobs:
             echo "python-version=$PYTHON_VERSION_INPUT" >> "$GITHUB_OUTPUT"
           fi
       - name: Setup uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ steps.pyver3.outputs.python-version }}
           # Wheel cache keyed on uv.lock; hosted runners only -- self-hosted
