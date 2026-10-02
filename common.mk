@@ -3,7 +3,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help format lint test test-only clean clean-build clean-pyc config config-test config-develop release-s3 upgrade-packages
+.PHONY: help format lint test test-only pin-check clean clean-build clean-pyc config config-test config-develop release-s3 upgrade-packages
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-24s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -38,6 +38,15 @@ test-only: ## Run the test suite in the locked environment (parallel when pytest
 	  && flags="-n auto --dist loadfile" \
 	  || { flags=""; echo "pytest-xdist not installed; running serially"; }; \
 	set -x; uv run --no-sync python -m pytest $$flags -x --log-level=INFO -l $${PIN_TESTS:-tests}
+
+# Set PIN_REVIEW_SCRIPT=path/to/review_pins.py to use a local copy instead of downloading.
+PIN_REVIEW_URL ?= https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.github/scripts/review_pins.py
+PIN_REVIEW_SCRIPT ?=
+
+pin-check: ## Fail if a version pin or floating git/URL dependency has no "# PIN:" block (offline).
+	@script="$(PIN_REVIEW_SCRIPT)"; \
+	if [ -z "$$script" ]; then script=/tmp/review_pins.py; curl -fsSL $(PIN_REVIEW_URL) -o "$$script" || exit 1; fi; \
+	uv run --no-project "$$script" --check
 
 clean: clean-build clean-pyc ## Remove generated build and Python artifacts.
 

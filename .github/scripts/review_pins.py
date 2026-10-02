@@ -30,6 +30,17 @@ the newest version is unchanged and the record is younger than
 ``--max-age-days`` (default 90), a conclusive verdict is reused instead of
 re-running the tests. ``--refresh`` ignores it.
 
+Floating references
+-------------------
+A direct URL / git requirement that follows a branch (``...@master``,
+``.../archive/main.zip``) or the default branch (no ``@ref``) is a *floating
+reference*: a monthly ``uv lock --upgrade`` can pull whatever the branch holds
+that day. Those need either a commit SHA (``...@<sha>``, ``.../archive/<sha>.zip``)
+or the same ``# PIN:`` block (``why:`` / ``remove:``) as a version pin. Tags
+and commit SHAs are accepted as pinned. The report shows each branch's current
+head (``git ls-remote``) and the exact requirement to paste to pin it.
+Requirements declared under ``[tool.uv.sources]`` are not inspected.
+
 Modes
 -----
 ``--check``  Offline. Exit 1 if a pin is undocumented. Meant for pre-commit / CI.
@@ -60,6 +71,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+from urllib.parse import urlsplit
+
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
@@ -74,6 +87,49 @@ REVIEWED_RE = re.compile(
 CACHEABLE = {"removable", "still needed"}  # verdicts that came from a test run
 LOCK_TIMEOUT = 900
 TEST_TIMEOUT = 1800
+
+
+SHA_RE = re.compile(r"^[0-9a-f]{7,40}$", re.I)
+TAG_RE = re.compile(  # v1.2.3, 2.0rc1, 1.0.0-beta.2 -- but not v3-upgrade
+    r"^v?\d+(\.\d+)*([.-]?(a|b|rc|alpha|beta|dev|post|pre)[.-]?\d*)?$", re.I
+)
+ARCHIVE_RE = re.compile(
+    r"^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/archive/"
+    r"(?P<heads>refs/heads/)?(?P<tags>refs/tags/)?(?P<ref>.+?)\.(?:zip|tar\.gz)$"
+)
+
+
+@dataclass
+class Floating:
+    url: str  # the requirement's URL as written
+    repo: str  # clone URL for ls-remote
+    ref: str | None  # None = default branch
+    prefix: str  # url up to where the ref goes
+    suffix: str  # url after the ref
+
+
+def classify_url(url: str) -> Floating | None:
+    """Return a Floating if ``url`` follows a branch / default branch, else None.
+
+    Commit SHAs and tags count as pinned; URLs we cannot interpret are ignored.
+    """
+    m = ARCHIVE_RE.match(url)
+    if m:
+        ref = m["ref"]
+        if m["tags"] or SHA_RE.match(ref) or TAG_RE.match(ref):
+            return None
+        repo = f"https://github.com/{m['owner']}/{m['repo']}.git"
+        start = m.start("heads") if m["heads"] else m.start("ref")  # drop refs/heads/ too
+        return Floating(url, repo, ref, url[:start], url[m.end("ref") :])
+    if url.startswith("git+"):
+        parts = urlsplit(url[4:])
+        path, _, ref = parts.path.rpartition("@") if "@" in parts.path else (parts.path, "", "")
+        if ref and (SHA_RE.match(ref) or TAG_RE.match(ref)):
+            return None
+        base = f"{parts.scheme}://{parts.netloc}{path}"
+        frag = f"#{parts.fragment}" if parts.fragment else ""
+        return Floating(url, base, ref or None, f"git+{base}@", frag)
+    return None
 
 
 @dataclass
@@ -96,6 +152,10 @@ class Pin:
     rev_verdict: str | None = None
     cached: bool = False  # verdict reused from the record, tests not re-run
     record: bool = False  # this run produced a result worth writing back
+    kind: str = "version"  # "version" or "floating"
+    floating: Floating | None = None
+    head: str | None = None  # current commit of the floating ref
+    locked_sha: str | None = None  # commit uv.lock resolved it to (git sources only)
 
     @property
     def documented(self) -> bool:
@@ -112,6 +172,11 @@ def collect(data: dict) -> list[Pin]:
             pins.append(Pin(raw, section, raw, constraint, verdict="unparsable"))
             return
         if req.url:
+            fl = classify_url(req.url)
+            if fl:
+                pins.append(
+                    Pin(raw, section, canonicalize_name(req.name), False, kind="floating", floating=fl)
+                )
             return
         spec_pinned = any(s.operator in PIN_OPERATORS for s in req.specifier)
         if not (constraint or spec_pinned):
@@ -271,6 +336,57 @@ def test_env(venv: Path, selection: str | None) -> dict:
     return env
 
 
+def locked_git_shas(lock: Path) -> dict[str, str]:
+    if not lock.exists():
+        return {}
+    out = {}
+    for p in tomllib.loads(lock.read_text()).get("package", []):
+        git = (p.get("source") or {}).get("git")
+        if git and "#" in git:
+            out[canonicalize_name(p["name"])] = git.rsplit("#", 1)[1]
+    return out
+
+
+def resolve_floating(pin: Pin, shas: dict[str, str]) -> None:
+    fl = pin.floating
+    pin.locked_sha = shas.get(pin.name)
+    target = fl.ref or "HEAD"
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    code, out = run(["git", "ls-remote", fl.repo, target], Path.cwd(), 60, env)
+    lines = [ln.split() for ln in out.splitlines() if "\t" in ln]
+    pick = next((ln for ln in lines if ln[-1] == f"refs/heads/{target}"), None) or (lines[0] if lines else None)
+    where = f"`{fl.ref}` branch" if fl.ref else "default branch"
+    if code != 0 or not pick:
+        pin.verdict = "floating"
+        pin.detail = f"follows the {where}; could not resolve its head ({tail(out)})"
+        return
+    pin.head = pick[0]
+    pin.verdict = "floating"
+    pin.detail = f"follows the {where}"
+    if pin.locked_sha and pin.locked_sha != pin.head:
+        pin.detail += f"; branch has moved since the lock ({pin.locked_sha[:9]} -> {pin.head[:9]})"
+
+
+def suggested(pin: Pin) -> str | None:
+    """The requirement rewritten to point at the branch's current commit."""
+    fl = pin.floating
+    if not (fl and pin.head):
+        return None
+    return pin.raw.replace(fl.url, f"{fl.prefix}{pin.head}{fl.suffix}")
+
+
+def baseline_lock_error(root: Path, scratch: Path) -> str | None:
+    """Run ``uv lock`` on the untouched project; a failure here (missing registry
+    credentials, no network) would otherwise make every pin look "still needed"."""
+    work = scratch / "lock-baseline"
+    shutil.copytree(root, work, ignore=COPY_IGNORE)
+    # --refresh: an up-to-date lock is otherwise accepted offline, which would
+    # hide missing registry credentials until the first relaxed lock.
+    code, out = run(["uv", "lock", "--refresh"], work, LOCK_TIMEOUT)
+    shutil.rmtree(work, ignore_errors=True)
+    return None if code == 0 else tail(out)
+
+
 def review(
     pin: Pin, root: Path, scratch: Path, gate: TestGate, baseline: dict,
     refresh: bool, max_age: int, today: date,
@@ -328,37 +444,67 @@ def review(
         pin.detail = f"tests fail on {pin.newest}: {tail(out)}"
 
 
+def floats_on(p: Pin) -> str:
+    return f"`{p.floating.ref}`" if p.floating.ref else "default branch"
+
+
 def render(pins: list[Pin], reviewed: bool) -> str:
     if not pins:
-        return "No version pins found in `pyproject.toml`.\n"
-    rows = []
-    for p in pins:
-        docs = "yes" if p.documented else "**missing**"
-        loc = f"`pyproject.toml:{p.line}`" if p.line else p.section
-        if reviewed:
-            versions = f"{p.locked or '?'} -> {p.newest or '?'}"
-            if p.record:
-                last = f"{date.today()} (this run)"
-            elif p.rev_date:
-                last = f"{p.rev_date} on {p.rev_version}"
+        return "No version pins or floating references found in `pyproject.toml`.\n"
+    versions = [p for p in pins if p.kind == "version"]
+    floating = [p for p in pins if p.kind == "floating"]
+    out = []
+
+    if versions:
+        rows = []
+        for p in versions:
+            docs = "yes" if p.documented else "**missing**"
+            loc = f"`pyproject.toml:{p.line}`" if p.line else p.section
+            if reviewed:
+                moved = f"{p.locked or '?'} -> {p.newest or '?'}"
+                if p.record:
+                    last = f"{date.today()} (this run)"
+                elif p.rev_date:
+                    last = f"{p.rev_date} on {p.rev_version}"
+                else:
+                    last = "never"
+                rows.append(
+                    f"| `{p.raw}` | {loc} | {docs} | {moved} | **{p.verdict}** | {last} | {p.detail} |"
+                )
             else:
-                last = "never"
-            rows.append(
-                f"| `{p.raw}` | {loc} | {docs} | {versions} | **{p.verdict}** | {last} | {p.detail} |"
-            )
+                rows.append(f"| `{p.raw}` | {loc} | {docs} |")
+        if reviewed:
+            head = "| Pin | Where | Documented | Locked -> relaxed | Verdict | Last reviewed | Detail |\n|---|---|---|---|---|---|---|\n"
         else:
-            rows.append(f"| `{p.raw}` | {loc} | {docs} |")
-    if reviewed:
-        head = "| Pin | Where | Documented | Locked -> relaxed | Verdict | Last reviewed | Detail |\n|---|---|---|---|---|---|---|\n"
-    else:
-        head = "| Pin | Where | Documented |\n|---|---|---|\n"
+            head = "| Pin | Where | Documented |\n|---|---|---|\n"
+        out.append(head + "\n".join(rows) + "\n")
+
+    if floating:
+        out.append("\n**Floating references** (follow a branch; pin to a commit SHA or document with `# PIN:`)\n\n")
+        rows = []
+        for p in floating:
+            docs = "yes" if p.documented else "**missing**"
+            loc = f"`pyproject.toml:{p.line}`" if p.line else p.section
+            if reviewed:
+                sha = f"`{p.head[:9]}`" if p.head else "?"
+                rows.append(f"| `{p.name}` | {loc} | {floats_on(p)} | {sha} | {docs} | {p.detail} |")
+            else:
+                rows.append(f"| `{p.name}` | {loc} | {floats_on(p)} | {docs} |")
+        if reviewed:
+            head = "| Dependency | Where | Floats on | Head now | Documented | Detail |\n|---|---|---|---|---|---|\n"
+        else:
+            head = "| Dependency | Where | Floats on | Documented |\n|---|---|---|---|\n"
+        out.append(head + "\n".join(rows) + "\n")
+        if reviewed:
+            fixes = [(p, suggested(p)) for p in floating if suggested(p)]
+            if fixes:
+                out.append("\nTo pin a floating reference to its current commit, use:\n\n")
+                out.extend(f"- `{fix}`\n" for _, fix in fixes)
+
     undocumented = sum(not p.documented for p in pins)
-    note = (
-        f"\n{undocumented} pin(s) lack a `# PIN:` block with `why:` and `remove:`.\n"
-        if undocumented
-        else ""
-    )
-    return head + "\n".join(rows) + "\n" + note
+    if undocumented:
+        out.append(f"\n{undocumented} entr(ies) lack a `# PIN:` block with `why:` and `remove:`.\n")
+    return "".join(out)
 
 
 def main() -> int:
@@ -386,18 +532,29 @@ def main() -> int:
         print(report)
         return 1 if any(not p.documented for p in pins) else 0
 
-    if pins and shutil.which("uv") is None:
+    if any(p.kind == "version" for p in pins) and shutil.which("uv") is None:
         print("uv not found on PATH", file=sys.stderr)
         return 2
     baseline = locked_versions(root / "uv.lock")
+    git_shas = locked_git_shas(root / "uv.lock")
     today = date.today()
     with tempfile.TemporaryDirectory(prefix="review-pins-") as tmp:
         gate = TestGate(args.test_cmd, root, Path(tmp))
+        lock_error = None
+        if any(p.kind == "version" for p in pins):
+            lock_error = baseline_lock_error(root, Path(tmp))
         for pin in pins:
             if pin.verdict == "unparsable":
                 pin.detail = "could not parse requirement"
                 continue
             print(f"reviewing {pin.raw} ...", file=sys.stderr)
+            if pin.kind == "floating":
+                resolve_floating(pin, git_shas)
+                continue
+            if lock_error:
+                pin.verdict = "not reviewed"
+                pin.detail = f"`uv lock` fails before any change (credentials? network?): {lock_error}"
+                continue
             review(pin, root, Path(tmp), gate, baseline, args.refresh, args.max_age_days, today)
 
     if args.write and any(p.record for p in pins):
