@@ -3,7 +3,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help format lint test clean clean-build clean-pyc config config-test config-develop release-s3 upgrade-packages
+.PHONY: help format lint test test-only clean clean-build clean-pyc config config-test config-develop release-s3 upgrade-packages
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-24s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -30,12 +30,14 @@ lint: ## Run Ruff and all configured pre-commit checks.
 	uvx ruff@$(RUFF_VERSION) check .
 	uvx pre-commit run --all-files
 
-test: lint ## Run the test suite in the locked environment (parallel when pytest-xdist is installed).
+test: lint test-only ## Run lint, then the test suite.
+
+test-only: ## Run the test suite in the locked environment (parallel when pytest-xdist is installed), without lint.
 	@[ -f .env ] && { echo "sourcing .env"; set -a; . ./.env; set +a; } || true; \
 	uv run --no-sync python -c "import xdist" 2>/dev/null \
 	  && flags="-n auto --dist loadfile" \
 	  || { flags=""; echo "pytest-xdist not installed; running serially"; }; \
-	set -x; uv run --no-sync python -m pytest $$flags -x --log-level=INFO -l tests
+	set -x; uv run --no-sync python -m pytest $$flags -x --log-level=INFO -l $${PIN_TESTS:-tests}
 
 clean: clean-build clean-pyc ## Remove generated build and Python artifacts.
 

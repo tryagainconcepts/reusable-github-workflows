@@ -22,6 +22,33 @@ on:
         type: number
         required: false
         default: 10
+      pin_review:
+        description: >-
+          Review version pins / constraints in pyproject.toml (see
+          .github/scripts/review_pins.py) and put the report in the PR body.
+          Non-fatal: it never blocks the dependency update.
+        type: boolean
+        required: false
+        default: true
+      pin_review_test_command:
+        description: >-
+          Shell command that runs the project's tests (e.g. "uv run pytest -x
+          tests"). When set, each pin that is holding a package back is tested
+          against the relaxed resolution to say whether it is still needed.
+          Defaults to the shared "test-only" target from common.mk; if the
+          repo has no such target the tests are skipped and the report only
+          says which pins hold a package back. A baseline run must pass first.
+          Raise timeout-minutes if the tests are slow.
+        type: string
+        required: false
+        default: "make test-only"
+      pin_review_refresh:
+        description: >-
+          Ignore the recorded "reviewed:" results and re-test every pin. Use it
+          after fixing code that a pin was working around.
+        type: boolean
+        required: false
+        default: false
     secrets:
       runner_admin_token:
         description: >-
@@ -169,6 +196,39 @@ jobs:
           uv lock --upgrade
         env:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
+      - name: Init PR body
+        run: echo "Automated dependency update (\`uv lock --upgrade\`)." > "$RUNNER_TEMP/pr-body.md"
+      # Relax each pin in a scratch copy and see whether it still holds a package
+      # back. The script is fetched from main (like the files above) so consumer
+      # repos need no copy. Never fails the update: a broken review only costs
+      # the report, and the 5 minute cap keeps it from eating the job timeout.
+      - name: Review pins
+        if: ${{ inputs.pin_review }}
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          IFS=":" read -r USERNAME PASSWORD <<< "$REGISTRY_AUTH"
+          echo "::add-mask::$USERNAME"
+          echo "::add-mask::$PASSWORD"
+          export UV_INDEX_PRIVATE_REGISTRY_USERNAME="$USERNAME"
+          export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$PASSWORD"
+          curl -fsSL -o "$RUNNER_TEMP/review_pins.py" \
+            https://raw.githubusercontent.com/tryagainconcepts/reusable-github-workflows/main/.github/scripts/review_pins.py
+          # --write records "reviewed: <date> against <version> -> <verdict>" in
+          # each pin's comment block; the PR step below commits that edit.
+          args=(--write --summary "$RUNNER_TEMP/pin-review.md")
+          if [ "$PIN_REFRESH" = "true" ]; then args+=(--refresh); fi
+          if [ "$PIN_TEST_COMMAND" = "make test-only" ] && ! make -n test-only >/dev/null 2>&1; then
+            echo "no test-only make target; skipping pin tests"; PIN_TEST_COMMAND=""
+          fi
+          if [ -n "$PIN_TEST_COMMAND" ]; then args+=(--test-cmd "$PIN_TEST_COMMAND"); fi
+          uv run --no-project "$RUNNER_TEMP/review_pins.py" "${args[@]}"
+          { echo; cat "$RUNNER_TEMP/pin-review.md"; } >> "$RUNNER_TEMP/pr-body.md"
+          cat "$RUNNER_TEMP/pin-review.md" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
+          PIN_TEST_COMMAND: ${{ inputs.pin_review_test_command }}
+          PIN_REFRESH: ${{ inputs.pin_review_refresh }}
       - name: format code
         run: |
           make format
@@ -192,6 +252,7 @@ jobs:
           # on the post-merge main run -- and the refreshed deps would never be
           # published. "fix(deps)" cuts a patch so the update actually ships.
           title: 'fix(deps): update python dependencies'
+          body-path: ${{ runner.temp }}/pr-body.md
           commit-message: 'fix(deps): update python dependencies'
           labels: |
             automated
