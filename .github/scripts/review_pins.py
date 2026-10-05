@@ -66,13 +66,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import tomllib
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-
 from urllib.parse import urlsplit
 
+import tomllib
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name
@@ -82,16 +81,17 @@ COPY_IGNORE = shutil.ignore_patterns(
     ".git", ".venv", "venv", "node_modules", "__pycache__", ".*_cache", ".idea"
 )
 REVIEWED_RE = re.compile(
-    r"\breviewed:\s*(\d{4}-\d{2}-\d{2})\s+against\s+(\S+)\s*->\s*(.+?)\s*$", re.I | re.M
+    r"\breviewed:\s*(\d{4}-\d{2}-\d{2})\s+against\s+(\S+)\s*->\s*(.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
 )
 CACHEABLE = {"removable", "still needed"}  # verdicts that came from a test run
 LOCK_TIMEOUT = 900
 TEST_TIMEOUT = 1800
 
 
-SHA_RE = re.compile(r"^[0-9a-f]{7,40}$", re.I)
+SHA_RE = re.compile(r"^[0-9a-f]{7,40}$", re.IGNORECASE)
 TAG_RE = re.compile(  # v1.2.3, 2.0rc1, 1.0.0-beta.2 -- but not v3-upgrade
-    r"^v?\d+(\.\d+)*([.-]?(a|b|rc|alpha|beta|dev|post|pre)[.-]?\d*)?$", re.I
+    r"^v?\d+(\.\d+)*([.-]?(a|b|rc|alpha|beta|dev|post|pre)[.-]?\d*)?$", re.IGNORECASE
 )
 ARCHIVE_RE = re.compile(
     r"^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/archive/"
@@ -119,11 +119,15 @@ def classify_url(url: str) -> Floating | None:
         if m["tags"] or SHA_RE.match(ref) or TAG_RE.match(ref):
             return None
         repo = f"https://github.com/{m['owner']}/{m['repo']}.git"
-        start = m.start("heads") if m["heads"] else m.start("ref")  # drop refs/heads/ too
+        start = (
+            m.start("heads") if m["heads"] else m.start("ref")
+        )  # drop refs/heads/ too
         return Floating(url, repo, ref, url[:start], url[m.end("ref") :])
     if url.startswith("git+"):
         parts = urlsplit(url[4:])
-        path, _, ref = parts.path.rpartition("@") if "@" in parts.path else (parts.path, "", "")
+        path, _, ref = (
+            parts.path.rpartition("@") if "@" in parts.path else (parts.path, "", "")
+        )
         if ref and (SHA_RE.match(ref) or TAG_RE.match(ref)):
             return None
         base = f"{parts.scheme}://{parts.netloc}{path}"
@@ -175,7 +179,14 @@ def collect(data: dict) -> list[Pin]:
             fl = classify_url(req.url)
             if fl:
                 pins.append(
-                    Pin(raw, section, canonicalize_name(req.name), False, kind="floating", floating=fl)
+                    Pin(
+                        raw,
+                        section,
+                        canonicalize_name(req.name),
+                        False,
+                        kind="floating",
+                        floating=fl,
+                    )
                 )
             return
         spec_pinned = any(s.operator in PIN_OPERATORS for s in req.specifier)
@@ -221,9 +232,9 @@ def read_docs(text: str, pins: list[Pin]) -> None:
                 break
             block.append(ln)
         body = "\n".join(block)
-        pin.why = bool(re.search(r"\bwhy:\s*\S", body, re.I))
-        pin.remove = bool(re.search(r"\bremove:\s*\S", body, re.I))
-        t = re.search(r"\btests:[ \t]*(\S.*?)\s*$", body, re.I | re.M)
+        pin.why = bool(re.search(r"\bwhy:\s*\S", body, re.IGNORECASE))
+        pin.remove = bool(re.search(r"\bremove:\s*\S", body, re.IGNORECASE))
+        t = re.search(r"\btests:[ \t]*(\S.*?)\s*$", body, re.IGNORECASE | re.MULTILINE)
         pin.tests = t[1] if t else None
         m = REVIEWED_RE.search(body)
         if m:
@@ -261,7 +272,9 @@ def write_reviews(text: str, pins: list[Pin], today: date) -> str:
 def relax(text: str, pin: Pin) -> str:
     raw = re.escape(pin.raw)
     if pin.relaxed is not None:
-        return re.sub(rf"""(["']){raw}\1""", lambda m: f"{m[1]}{pin.relaxed}{m[1]}", text)
+        return re.sub(
+            rf"""(["']){raw}\1""", lambda m: f"{m[1]}{pin.relaxed}{m[1]}", text
+        )
     for pattern in (
         rf"""["']{raw}["']\s*,\s*""",  # first / middle entry
         rf"""\s*,\s*["']{raw}["']""",  # last entry
@@ -280,7 +293,9 @@ def locked_versions(lock: Path) -> dict[str, str]:
     return {canonicalize_name(p["name"]): p.get("version", "") for p in pkgs}
 
 
-def run(cmd: list[str], cwd: Path, timeout: int, env: dict | None = None) -> tuple[int, str]:
+def run(
+    cmd: list[str], cwd: Path, timeout: int, env: dict | None = None
+) -> tuple[int, str]:
     try:
         proc = subprocess.run(
             cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env
@@ -305,7 +320,9 @@ class TestGate:
 
     def __init__(self, cmd: str | None, root: Path, scratch: Path):
         self._cmd, self.root, self.scratch = cmd, root, scratch
-        self._baseline: dict[str, str] = {}  # selection -> "" if green else failure tail
+        self._baseline: dict[
+            str, str
+        ] = {}  # selection -> "" if green else failure tail
         self.skipped: list[str] = []
 
     def cmd(self, selection: str | None) -> str | None:
@@ -313,7 +330,9 @@ class TestGate:
             return None
         key = selection or ""
         if key not in self._baseline:
-            print(f"running baseline tests ({key or 'full suite'}) ...", file=sys.stderr)
+            print(
+                f"running baseline tests ({key or 'full suite'}) ...", file=sys.stderr
+            )
             base = self.scratch / "baseline"
             shutil.copytree(self.root, base, ignore=COPY_IGNORE)
             env = test_env(self.scratch / "venv-base", selection)
@@ -354,7 +373,9 @@ def resolve_floating(pin: Pin, shas: dict[str, str]) -> None:
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
     code, out = run(["git", "ls-remote", fl.repo, target], Path.cwd(), 60, env)
     lines = [ln.split() for ln in out.splitlines() if "\t" in ln]
-    pick = next((ln for ln in lines if ln[-1] == f"refs/heads/{target}"), None) or (lines[0] if lines else None)
+    pick = next((ln for ln in lines if ln[-1] == f"refs/heads/{target}"), None) or (
+        lines[0] if lines else None
+    )
     where = f"`{fl.ref}` branch" if fl.ref else "default branch"
     if code != 0 or not pick:
         pin.verdict = "floating"
@@ -388,8 +409,14 @@ def baseline_lock_error(root: Path, scratch: Path) -> str | None:
 
 
 def review(
-    pin: Pin, root: Path, scratch: Path, gate: TestGate, baseline: dict,
-    refresh: bool, max_age: int, today: date,
+    pin: Pin,
+    root: Path,
+    scratch: Path,
+    gate: TestGate,
+    baseline: dict,
+    refresh: bool,
+    max_age: int,
+    today: date,
 ) -> None:
     pyproject, lock = root / "pyproject.toml", root / "uv.lock"
     work = scratch / "work"
@@ -480,30 +507,40 @@ def render(pins: list[Pin], reviewed: bool) -> str:
         out.append(head + "\n".join(rows) + "\n")
 
     if floating:
-        out.append("\n**Floating references** (follow a branch; pin to a commit SHA or document with `# PIN:`)\n\n")
+        out.append(
+            "\n**Floating references** (follow a branch; pin to a commit SHA or document with `# PIN:`)\n\n"
+        )
         rows = []
         for p in floating:
             docs = "yes" if p.documented else "**missing**"
             loc = f"`pyproject.toml:{p.line}`" if p.line else p.section
             if reviewed:
                 sha = f"`{p.head[:9]}`" if p.head else "?"
-                rows.append(f"| `{p.name}` | {loc} | {floats_on(p)} | {sha} | {docs} | {p.detail} |")
+                rows.append(
+                    f"| `{p.name}` | {loc} | {floats_on(p)} | {sha} | {docs} | {p.detail} |"
+                )
             else:
                 rows.append(f"| `{p.name}` | {loc} | {floats_on(p)} | {docs} |")
         if reviewed:
             head = "| Dependency | Where | Floats on | Head now | Documented | Detail |\n|---|---|---|---|---|---|\n"
         else:
-            head = "| Dependency | Where | Floats on | Documented |\n|---|---|---|---|\n"
+            head = (
+                "| Dependency | Where | Floats on | Documented |\n|---|---|---|---|\n"
+            )
         out.append(head + "\n".join(rows) + "\n")
         if reviewed:
             fixes = [(p, suggested(p)) for p in floating if suggested(p)]
             if fixes:
-                out.append("\nTo pin a floating reference to its current commit, use:\n\n")
+                out.append(
+                    "\nTo pin a floating reference to its current commit, use:\n\n"
+                )
                 out.extend(f"- `{fix}`\n" for _, fix in fixes)
 
     undocumented = sum(not p.documented for p in pins)
     if undocumented:
-        out.append(f"\n{undocumented} entr(ies) lack a `# PIN:` block with `why:` and `remove:`.\n")
+        out.append(
+            f"\n{undocumented} entr(ies) lack a `# PIN:` block with `why:` and `remove:`.\n"
+        )
     return "".join(out)
 
 
@@ -513,8 +550,12 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="offline docs check only")
     parser.add_argument("--test-cmd", help="shell command that runs the test suite")
     parser.add_argument("--summary", type=Path)
-    parser.add_argument("--write", action="store_true", help="record results in pyproject.toml")
-    parser.add_argument("--refresh", action="store_true", help="ignore recorded reviews")
+    parser.add_argument(
+        "--write", action="store_true", help="record results in pyproject.toml"
+    )
+    parser.add_argument(
+        "--refresh", action="store_true", help="ignore recorded reviews"
+    )
     parser.add_argument("--max-age-days", type=int, default=90)
     args = parser.parse_args()
 
@@ -555,14 +596,24 @@ def main() -> int:
                 pin.verdict = "not reviewed"
                 pin.detail = f"`uv lock` fails before any change (credentials? network?): {lock_error}"
                 continue
-            review(pin, root, Path(tmp), gate, baseline, args.refresh, args.max_age_days, today)
+            review(
+                pin,
+                root,
+                Path(tmp),
+                gate,
+                baseline,
+                args.refresh,
+                args.max_age_days,
+                today,
+            )
 
     if args.write and any(p.record for p in pins):
         pyproject.write_text(write_reviews(text, pins, today))
     skipped = ""
     if gate.skipped:
-        skipped = "\nBaseline tests fail without any change, so these pins were not tested:\n" + "".join(
-            f"- {m}\n" for m in gate.skipped
+        skipped = (
+            "\nBaseline tests fail without any change, so these pins were not tested:\n"
+            + "".join(f"- {m}\n" for m in gate.skipped)
         )
 
     report = "### Pin review\n\n" + render(pins, reviewed=True) + skipped
