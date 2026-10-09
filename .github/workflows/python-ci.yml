@@ -381,10 +381,13 @@ jobs:
             const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
             let result = "not_merged";
             for (const pr of candidates) {
+              // Keep release PR checks running, but skip CI on the release merge commit.
+              const isRelease = pr.labels.some((l) => l.name === "autorelease: pending");
               for (let attempt = 1; attempt <= RETRIES; attempt++) {
                 try {
                   await github.rest.pulls.merge({
                     owner, repo, pull_number: pr.number, merge_method: "merge",
+                    ...(isRelease ? { commit_message: `${pr.title}\n\n[ci skip]` } : {}),
                   });
                   core.info(`Merged PR #${pr.number}`);
                   result = "merged";
