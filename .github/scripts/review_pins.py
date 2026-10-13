@@ -66,12 +66,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import tomllib
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.specifiers import SpecifierSet
 from packaging.utils import canonicalize_name

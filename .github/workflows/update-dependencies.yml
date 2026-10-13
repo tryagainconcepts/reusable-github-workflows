@@ -75,10 +75,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ---- Gates ------------------------------------------------------------------
-      # Updated hooks must pass on the repo (also validates the edited workflow YAML).
+      # Hooks apply safe fixes (including Ruff fixes/formatting) on their first
+      # pass. Recheck once so file modifications alone don't fail the gate.
+      # The PR step below commits the resulting script and workflow changes.
       - name: Run pre-commit hooks
         id: hooks
-        run: uvx pre-commit run --all-files --show-diff-on-failure --color=always
+        run: |
+          if uvx pre-commit run --all-files --show-diff-on-failure --color=always; then
+            exit 0
+          fi
+          echo "::notice::Pre-commit applied fixes or reported errors; checking again after automatic fixes."
+          uvx pre-commit run --all-files --show-diff-on-failure --color=always
       # Keep failed gates visibly failed. Explicit conditions allow the audit
       # and review PR to proceed after a hook failure without allowing a merge.
       # Online audits (impostor-commit, known-vulnerable-actions, ...) verify the new SHAs.
