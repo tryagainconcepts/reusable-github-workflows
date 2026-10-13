@@ -78,10 +78,13 @@ jobs:
       # Updated hooks must pass on the repo (also validates the edited workflow YAML).
       - name: Run pre-commit hooks
         id: hooks
-        continue-on-error: true
         run: uvx pre-commit run --all-files --show-diff-on-failure --color=always
+      # Keep failed gates visibly failed. Explicit conditions allow the audit
+      # and review PR to proceed after a hook failure without allowing a merge.
       # Online audits (impostor-commit, known-vulnerable-actions, ...) verify the new SHAs.
       - name: zizmor 🌈 (after update)
+        id: audit
+        if: ${{ !cancelled() && (steps.hooks.outcome == 'success' || steps.hooks.outcome == 'failure') }}
         run: |
           uvx zizmor --format json --no-exit-codes .github/workflows > "$RUNNER_TEMP/zizmor-after.json"
           uvx zizmor --no-exit-codes .github/workflows
@@ -89,7 +92,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: zizmor 🌈 gate — no new findings
         id: gate
-        continue-on-error: true
+        if: ${{ !cancelled() && steps.audit.outcome == 'success' }}
         run: |
           uv run --no-project .github/scripts/zizmor_diff.py \
             "$RUNNER_TEMP/zizmor-before.json" "$RUNNER_TEMP/zizmor-after.json" \
@@ -97,6 +100,8 @@ jobs:
 
       # ---- Report + PR --------------------------------------------------------------
       - name: Write PR body
+        id: report
+        if: ${{ !cancelled() && (steps.gate.outcome == 'success' || steps.gate.outcome == 'failure') }}
         run: |
           {
             echo 'Automated weekly dependency update.'
@@ -140,12 +145,14 @@ jobs:
       # contents, pull-requests, and workflows permissions.
       - name: Mint app token
         id: app-token
+        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.APP_ID || secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Create Pull Request
         id: cpr
+        if: ${{ !cancelled() && steps.app-token.outcome == 'success' }}
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           token: ${{ steps.app-token.outputs.token }}
@@ -165,14 +172,25 @@ jobs:
       # main has no branch protection, so native auto-merge is unavailable; merge directly
       # once both gates have passed, using the app token (GITHUB_TOKEN is read-only here).
       - name: Auto-merge
-        if: steps.cpr.outputs.pull-request-number != '' && steps.gate.outcome == 'success' && steps.hooks.outcome == 'success'
+        if: ${{ !cancelled() && steps.cpr.outcome == 'success' && steps.cpr.outputs.pull-request-number != '' && steps.gate.outcome == 'success' && steps.hooks.outcome == 'success' }}
         run: gh pr merge --merge --delete-branch "$PR_NUMBER"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-      - name: Fail if a gate did not pass
-        if: steps.gate.outcome == 'failure' || steps.hooks.outcome == 'failure'
+      - name: Report failed checks
+        if: ${{ !cancelled() && (steps.gate.outcome == 'failure' || steps.hooks.outcome == 'failure' || steps.audit.outcome == 'failure') }}
+        env:
+          HOOKS_OUTCOME: ${{ steps.hooks.outcome }}
+          AUDIT_OUTCOME: ${{ steps.audit.outcome }}
+          GATE_OUTCOME: ${{ steps.gate.outcome }}
         run: |
-          echo "::error::pre-commit hooks or zizmor gate failed; PR left open for review."
-          exit 1
+          if [ "$HOOKS_OUTCOME" = "failure" ]; then
+            echo "::error title=Pre-commit failed::See the Run pre-commit hooks step for hook errors and file changes."
+          fi
+          if [ "$AUDIT_OUTCOME" = "failure" ]; then
+            echo "::error title=Zizmor audit failed::See the zizmor (after update) step for the audit error."
+          fi
+          if [ "$GATE_OUTCOME" = "failure" ]; then
+            echo "::error title=Zizmor gate failed::See the zizmor gate step for new security findings."
+          fi
