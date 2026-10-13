@@ -180,7 +180,13 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
-            const title = (context.payload.pull_request.title || "").trim();
+            // Reruns retain the original event payload, including its old title.
+            // Fetch the current PR so a title correction is picked up on rerun.
+            const { data: pullRequest } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            const title = (pullRequest.title || "").trim();
             const TYPES = "build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test";
             const conventional = new RegExp(`^(${TYPES})(\\([^)]+\\))?!?: .+`);
             if (!conventional.test(title)) {
@@ -190,7 +196,7 @@ jobs:
                 `release-please will SILENTLY skip the release if it can't parse it.\n` +
                 `Use "<type>: <subject>", e.g. "feat: add X", "fix: correct Y", ` +
                 `"chore: bump deps" (optional scope: "feat(admin): ...").\n` +
-                `Types: ${TYPES.replace(/\\|/g, ", ")}.`
+                `Types: ${TYPES.replace(/\|/g, ", ")}.`
               );
               return;
             }
