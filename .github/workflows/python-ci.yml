@@ -60,12 +60,13 @@ on:
         required: false
       release_please_token:
         description: >-
-          PAT used by release-please to open its release PR. Required for the
+          Optional PAT used by release-please to open release PRs. Required for the
           release train to be fully hands-off: a PR opened with the default
           GITHUB_TOKEN does NOT trigger CI/automerge on itself, so the release PR
           would sit unmerged. With this PAT the release PR triggers CI and, being
           labelled "automerge", merges automatically. When absent, release-please
           falls back to GITHUB_TOKEN and its release PR must be merged manually.
+          Auto-merge of PRs with CI uses GITHUB_TOKEN and dispatches Main CI.
         required: false
       slack_webhook_url:
         description: "notify slack on github action result"
@@ -331,8 +332,9 @@ jobs:
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
 
   # Merge happens only after the whole build/test job above has finished green,
-  # in its own job; deploy then runs in a separate job (a merge done with
-  # GITHUB_TOKEN does not trigger a new run on main, so it must happen here).
+  # using GITHUB_TOKEN, then explicitly dispatch the caller on main.
+  # The caller must enable workflow_dispatch and grant actions: write.
+  # Deployment and release processing happen only in the main run.
   automerge:
     # Cancel the same job from an older run on the same branch.
     concurrency:
@@ -342,7 +344,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build-test-deploy
-    if: github.ref != 'refs/heads/main'
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     outputs:
       mergeResult: ${{ steps.automerge.outputs.mergeResult }}
     steps:
@@ -353,6 +359,7 @@ jobs:
         id: automerge
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
+          github-token: ${{ github.token }}
           script: |
             const { owner, repo } = context.repo;
             const REQUIRED = "automerge";
@@ -376,7 +383,7 @@ jobs:
             }
             const candidates = prs.filter((pr) => {
               const labels = pr.labels.map((l) => l.name);
-              return pr.state === "open" && labels.includes(REQUIRED) && !labels.includes(BLOCKING);
+              return pr.state === "open" && pr.base.ref === "main" && labels.includes(REQUIRED) && !labels.includes(BLOCKING);
             });
             if (candidates.length === 0) {
               core.info(`No open PR for ${context.sha} labelled "${REQUIRED}"; skipping.`);
@@ -387,14 +394,15 @@ jobs:
             const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
             let result = "not_merged";
             for (const pr of candidates) {
-              // Keep release PR checks running, but skip CI on the release merge commit.
-              const isRelease = pr.labels.some((l) => l.name === "autorelease: pending");
               for (let attempt = 1; attempt <= RETRIES; attempt++) {
                 try {
-                  await github.rest.pulls.merge({
+                  const { data: merge } = await github.rest.pulls.merge({
                     owner, repo, pull_number: pr.number, merge_method: "merge",
-                    ...(isRelease ? { commit_message: `${pr.title}\n\n[ci skip]` } : {}),
+                    sha: pr.head.sha,
                   });
+                  if (!merge.merged) {
+                    throw new Error(`PR #${pr.number} was not merged: ${merge.message}`);
+                  }
                   core.info(`Merged PR #${pr.number}`);
                   result = "merged";
                   break;
@@ -408,6 +416,25 @@ jobs:
               }
             }
             core.setOutput("mergeResult", result);
+      - name: Trigger Main CI after merge
+        if: steps.automerge.outputs.mergeResult == 'merged'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            // This is the caller's run, not the reusable workflow's file.
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner, repo, run_id: context.runId,
+            });
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner, repo, workflow_id: run.workflow_id, ref: "main",
+              });
+              core.info(`Dispatched Main CI (workflow ${run.workflow_id}) on main.`);
+            } catch (error) {
+              core.setFailed(`PR merged, but Main CI dispatch failed: ${error.message}. Enable workflow_dispatch on the caller workflow, grant actions: write, and provide defaults for any required dispatch inputs. Run Main CI manually on main to recover.`);
+            }
 
   release:
     # Cancel the same job from an older run on the same branch.
@@ -420,18 +447,12 @@ jobs:
     # fallback to ubuntu-latest when none is idle).
     runs-on: ${{ fromJSON(needs.pick-runner.outputs.runs-on) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    # Ordered after release-please so a release (version bump + commit + tag) is
-    # cut before we publish/deploy. release-please runs on a main push and on the
-    # automerge path; either way it may be skipped, so !cancelled() (below) keeps
-    # this job running. The pypi publish step is gated on release_created; the
-    # deploy_script step is not, so app deploys still run on every main push.
+    # Publish/deploy only from Main CI after its build and release processing.
+    # !cancelled() allows the automerge dependency to be skipped on main.
     needs: [pick-runner, build-test-deploy, automerge, release-please]
-    # Run on a push to main, or right after this run merged a PR into main.
-    # (!cancelled() because automerge/release-please are skipped on some paths
-    # and would otherwise skip us.)
     if: >-
-      !cancelled() && needs.build-test-deploy.result == 'success' &&
-      (github.ref == 'refs/heads/main' || needs.automerge.outputs.mergeResult == 'merged')
+      !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' &&
+      needs.build-test-deploy.result == 'success' && needs.release-please.result == 'success'
     env:
       env_base64: ${{ secrets.env_base64 }}
     steps:
@@ -708,15 +729,11 @@ jobs:
     # generic changelog entries); merging that PR bumps pyproject.toml, updates
     # CHANGELOG.md, tags the release, and publishes a GitHub release.
     #
-    # Runs on a push to main OR right after the automerge job merged a PR in
-    # this run. The latter matters because automerge merges with GITHUB_TOKEN,
-    # which does NOT emit a push event on main -- so release-please would never
-    # run post-merge. It operates on `main` via the API (target-branch), so it
-    # works even though this run's ref is the PR branch.
+    # Process releases only after the build succeeds in Main CI.
     if: >-
-      !cancelled() && needs.build-test-deploy.result == 'success' &&
-      (github.ref == 'refs/heads/main' || needs.automerge.outputs.mergeResult == 'merged')
-    needs: [build-test-deploy, automerge]
+      !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' &&
+      needs.build-test-deploy.result == 'success'
+    needs: [build-test-deploy]
     outputs:
       release_created: ${{ steps.release_please.outputs.release_created }}
     permissions:
@@ -731,8 +748,7 @@ jobs:
           # not trigger workflows, so it would sit unmerged. Falls back to
           # GITHUB_TOKEN (release PR must then be merged manually).
           token: ${{ secrets.release_please_token || github.token }}
-          # Operate on main explicitly: when this job runs in the automerge run,
-          # github.ref is the PR branch, but the merge already landed on main.
+          # Release the same branch that triggered this Main CI run.
           target-branch: main
           # caller repos may provide release-please-config.json +
           # .release-please-manifest.json to override this config-less default
