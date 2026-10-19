@@ -60,13 +60,8 @@ on:
         required: false
       release_please_token:
         description: >-
-          Optional PAT used by release-please to open release PRs. Required for the
-          release train to be fully hands-off: a PR opened with the default
-          GITHUB_TOKEN does NOT trigger CI/automerge on itself, so the release PR
-          would sit unmerged. With this PAT the release PR triggers CI and, being
-          labelled "automerge", merges automatically. When absent, release-please
-          falls back to GITHUB_TOKEN and its release PR must be merged manually.
-          Auto-merge of PRs with CI uses GITHUB_TOKEN and dispatches Main CI.
+          Deprecated compatibility secret. Direct releases and automatic merges
+          now use GITHUB_TOKEN; this value is no longer used.
         required: false
       slack_webhook_url:
         description: "notify slack on github action result"
@@ -172,10 +167,8 @@ jobs:
       env_base64: ${{ secrets.env_base64 }}
     steps:
       # Fail fast on a non-Conventional-Commit PR title. Squash-merges use the
-      # PR title as the commit message, which release-please parses to cut a
-      # release; a title it can't parse makes it SILENTLY skip the release (no
-      # error, no published version). Turn that silent skip into a hard, early
-      # failure so the requirement is explicit rather than implicit.
+      # PR title as the commit message. The main-only direct release job uses
+      # Conventional Commits to calculate version bumps and release notes.
       - name: Lint PR title (Conventional Commits)
         if: github.event_name == 'pull_request'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
@@ -194,7 +187,7 @@ jobs:
               core.setFailed(
                 `PR title is not a Conventional Commit:\n  "${title}"\n\n` +
                 `Squash-merges use the PR title as the commit message, and ` +
-                `release-please will SILENTLY skip the release if it can't parse it.\n` +
+                `The direct release job needs Conventional Commits to determine the next version.\n` +
                 `Use "<type>: <subject>", e.g. "feat: add X", "fix: correct Y", ` +
                 `"chore: bump deps" (optional scope: "feat(admin): ...").\n` +
                 `Types: ${TYPES.replace(/\|/g, ", ")}.`
@@ -458,7 +451,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: ${{ needs.release-please.outputs.release_sha }}
           persist-credentials: false
       # Python version resolution: if pyproject.toml declares requires-python,
       # leave python-version empty so uv resolves it from there; otherwise fall
@@ -511,12 +504,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.aws_secret }}
           AWS_DEFAULT_REGION: ${{ inputs.aws_region }}
           REGISTRY_AUTH: ${{ secrets.pipy_registry_auth }}
-      # Version bumps, tags, CHANGELOG.md, and GitHub releases are handled by
-      # the release-please job (merge its release PR to cut a release); the
-      # per-deploy `uv version --bump minor` + tag push used to live here.
-      # Publish only when release-please actually cut a release this run (the
-      # release-PR merge), so pyproject is already bumped and we never re-publish
-      # an existing version on ordinary main pushes.
+      # Publish the direct release commit only when a new release was created.
       - name: Release pypi on main branch
         if: inputs.pypi_release && needs.release-please.outputs.release_created == 'true'
         run: |
@@ -716,80 +704,139 @@ jobs:
             exit 1
           fi
           echo "Teams notification sent (HTTP $HTTP_CODE)"
+  # Keep the job ID for callers/status consumers; releases no longer use PRs.
   release-please:
-    # Cancel the same job from an older run on the same branch.
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-release-please
-      cancel-in-progress: true
-    name: Release Please
+      group: ${{ github.repository }}-direct-release-main
+      cancel-in-progress: false
+    name: Direct release on main
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Maintains a running "release PR" that accumulates Conventional Commits
-    # (not enforced; commits that do not follow the convention simply get
-    # generic changelog entries); merging that PR bumps pyproject.toml, updates
-    # CHANGELOG.md, tags the release, and publishes a GitHub release.
-    #
-    # Process releases only after the build succeeds in Main CI.
     if: >-
       !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' &&
       needs.build-test-deploy.result == 'success'
     needs: [build-test-deploy]
     outputs:
-      release_created: ${{ steps.release_please.outputs.release_created }}
+      release_created: ${{ steps.github_release.outputs.release_created }}
+      release_sha: ${{ steps.push.outputs.release_sha }}
     permissions:
       contents: write
-      pull-requests: write
     steps:
-      - id: release_please
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - name: Checkout tested main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Open the release PR with a PAT (when provided) so it triggers CI on
-          # itself and can be auto-merged; a PR opened with GITHUB_TOKEN does
-          # not trigger workflows, so it would sit unmerged. Falls back to
-          # GITHUB_TOKEN (release PR must then be merged manually).
-          token: ${{ secrets.release_please_token || github.token }}
-          # Release the same branch that triggered this Main CI run.
-          target-branch: main
-          # caller repos may provide release-please-config.json +
-          # .release-please-manifest.json to override this config-less default
-          release-type: python
-      # Label the release PR "automerge" so the automerge job merges it once its
-      # checks pass -- making the release train fully hands-off. Only meaningful
-      # when a PAT opened the PR (otherwise no CI runs on it); harmless otherwise.
-      - name: Label release PR for auto-merge
-        if: steps.release_please.outputs.pr != '' && steps.release_please.outputs.pr != null
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        with:
-          github-token: ${{ secrets.release_please_token || github.token }}
-          script: |
-            const pr = JSON.parse(process.env.RP_PR);
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pr.number,
-              labels: ["automerge"],
-            });
-            core.info(`Labelled release PR #${pr.number} with "automerge".`);
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          # GITHUB_TOKEN pushes do not start another CI run.
+          token: ${{ github.token }}
+          persist-credentials: true
+      - name: Verify main has not advanced
         env:
-          RP_PR: ${{ steps.release_please.outputs.pr }}
-      # Fail loud when a push to main advanced HEAD but release-please has
-      # nothing to release AND no pending release PR -- the silent-skip case
-      # (e.g. a non-Conventional-Commit that release-please can't parse). If a
-      # release was cut (`release_created`) or a release PR is open (`pr` set),
-      # this passes.
-      - name: Fail if release-please produced no release or release PR
-        # Only enforced for repos that publish (pypi_release); app-only repos
-        # using deploy_script may not follow Conventional Commits and shouldn't
-        # be blocked here.
-        if: >-
-          inputs.pypi_release &&
-          steps.release_please.outputs.release_created != 'true' &&
-          (steps.release_please.outputs.pr == '' || steps.release_please.outputs.pr == null)
+          TESTED_SHA: ${{ github.sha }}
         run: |
-          echo "::error title=release-please skipped::No release was cut and no release PR is open."
-          echo "release-please found no releasable commits since the last release."
-          echo "The most likely cause is a commit on main whose message is not a"
-          echo "Conventional Commit (release-please cannot parse it, so it is ignored"
-          echo "and nothing is ever published). Land a conventional commit"
-          echo '(e.g. "feat: ..." / "fix: ...") on main to cut a release.'
-          exit 1
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "$TESTED_SHA" ]; then
+            echo "::error::main advanced after this build. Release stopped; use the newer Main CI run."
+            exit 1
+          fi
+          git switch -C main "$TESTED_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Setup release tools
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: '3.12'
+      - name: Configure direct release
+        env:
+          PYPI_RELEASE: ${{ inputs.pypi_release }}
+        run: |
+          python3 - <<'PYCONFIG'
+          import json
+          import os
+          import tomllib
+          from pathlib import Path
+
+          project = Path("pyproject.toml")
+          data = tomllib.loads(project.read_text()) if project.exists() else {}
+          version_fields = []
+          for key, table in (("project.version", data.get("project", {})),
+                             ("tool.poetry.version", data.get("tool", {}).get("poetry", {}))):
+              if "version" in table:
+                  version_fields.append(f"pyproject.toml:{key}")
+          if os.environ["PYPI_RELEASE"] == "true" and not version_fields:
+              raise SystemExit("Direct package releases require a static project.version or tool.poetry.version in pyproject.toml")
+          config = '\n'.join([
+              '[semantic_release]',
+              'commit_parser = "conventional"',
+              'commit_message = "chore(main): release {version} [ci skip]"',
+              'commit_author = "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"',
+              'allow_zero_version = true',
+              'major_on_zero = false',
+              'tag_format = "v{version}"',
+              'version_toml = ' + json.dumps(version_fields),
+              '[semantic_release.branches.main]',
+              'match = "^main$"',
+              'prerelease = false',
+              '[semantic_release.changelog]',
+              'mode = "update"',
+              # Do not render templates from the consumer application.
+              'template_dir = ".git/direct-release-templates"',
+              '[semantic_release.changelog.default_templates]',
+              'changelog_file = "CHANGELOG.md"',
+          ])
+          Path(os.environ["RUNNER_TEMP"], "direct-release.toml").write_text(config + '\n')
+          # Preserve the existing Release Please changelog during migration.
+          changelog = Path("CHANGELOG.md")
+          if changelog.exists() and '<!-- version list -->' not in changelog.read_text():
+              changelog.write_text('# CHANGELOG\n\n<!-- version list -->\n\n' + changelog.read_text())
+          PYCONFIG
+      - name: Prepare version commit and tag locally
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          uvx --from python-semantic-release==10.7.0 semantic-release \
+            --config "$RUNNER_TEMP/direct-release.toml" \
+            version --no-push --no-vcs-release --skip-build
+      - name: Push release commit and tag atomically
+        id: push
+        env:
+          NEW_RELEASE: ${{ steps.version.outputs.released }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$NEW_RELEASE" = "true" ]; then
+            # No force push: if main moves, neither the commit nor tag is pushed.
+            git push --atomic origin HEAD:refs/heads/main "refs/tags/v$VERSION"
+          fi
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          # Also recover a GitHub Release if an earlier run pushed its tag but
+          # failed before creating the GitHub Release.
+          if [ -n "$VERSION" ] && [ "$(git tag --points-at HEAD --list "v$VERSION")" = "v$VERSION" ]; then
+            echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create GitHub Release
+        id: github_release
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          TAG: ${{ steps.push.outputs.tag }}
+          NEW_RELEASE: ${{ steps.version.outputs.released }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const tag = process.env.TAG;
+            core.setOutput("release_created", "false");
+            if (!tag) {
+              core.info("No releasable changes; deployment may continue without a version bump.");
+              return;
+            }
+            const args = { ...context.repo, tag };
+            try {
+              await github.rest.repos.getReleaseByTag(args);
+              core.setOutput("release_created", process.env.NEW_RELEASE === "true" ? "true" : "false");
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.repos.createRelease({
+                ...context.repo, tag_name: tag, name: tag, generate_release_notes: true,
+              });
+              core.setOutput("release_created", "true");
+            }
