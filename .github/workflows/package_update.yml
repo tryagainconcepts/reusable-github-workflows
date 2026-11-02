@@ -264,7 +264,7 @@ jobs:
       # (Needs a ruleset/branch protection with required status checks on the base
       # branch; without one GitHub refuses to enable auto-merge.)
       - name: Enable auto-merge
-        if: always() && steps.cpr.outputs.pull-request-operation == 'created'
+        if: always() && steps.cpr.outputs.pull-request-number != ''
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           # Same PAT that opened the PR; GITHUB_TOKEN cannot enable auto-merge on it.
